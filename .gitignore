@@ -1,0 +1,6 @@
+# Generated site output (rebuilt by `python site_source_pages.py publish`
+# from the rendered tree + the map artefact); 5+ GB, never versioned.
+/published/
+
+__pycache__/
+*.pyc
