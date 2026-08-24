@@ -1,0 +1,13 @@
+{
+    "ISABELLE_HOME/src/HOL/Library/Tools/smt_word.ML": "HOL/HOL-Library",
+    "ISABELLE_HOME/src/HOL/Library/Tools/word_lib.ML": "HOL/HOL-Library",
+    "ISABELLE_HOME/src/Provers/blast.ML": "HOL/HOL",
+    "ISABELLE_HOME/src/Provers/clasimp.ML": "HOL/HOL",
+    "ISABELLE_HOME/src/Provers/classical.ML": "HOL/HOL",
+    "ISABELLE_HOME/src/Provers/hypsubst.ML": "HOL/HOL",
+    "ISABELLE_HOME/src/Provers/splitter.ML": "HOL/HOL",
+    "ISABELLE_HOME/src/Tools/atomize_elim.ML": "HOL/HOL",
+    "ISABELLE_HOME/src/Tools/case_product.ML": "HOL/HOL",
+    "ISABELLE_HOME/src/Tools/eqsubst.ML": "HOL/HOL",
+    "ISABELLE_HOME/src/Tools/induct.ML": "HOL/HOL"
+}

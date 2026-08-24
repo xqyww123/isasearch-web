@@ -15,6 +15,15 @@ import pytest
 import site_source_pages as sp
 
 
+@pytest.fixture(autouse=True)
+def _isolate_aux_base_choices(monkeypatch, tmp_path):
+    """Keep the repository's real site/aux-base-choices.json out of the test
+    trees: the default table path becomes a nonexistent tmp file (= empty
+    table) unless a test passes its own."""
+    monkeypatch.setattr(sp, "aux_base_choices_path",
+                        lambda: str(tmp_path / "aux-base-choices.json"))
+
+
 # --- the path functions and D50's predicate ---------------------------------
 
 def test_a_link_exists_iff_the_position_is_symbolic():
@@ -504,61 +513,100 @@ def test_a_page_showing_a_different_files_line_count_is_a_hard_error():
     sp.inject_line_marks(_page("one\ntwo\nthree\nfour"), [2], "p", 3)  # ±1 ok
 
 
-# --- the id-union merge (D49 ruling 6) ---------------------------------------
+# --- the id-union merge (D49 ruling 6, as amended 2026-08-24) -----------------
 
 def test_identical_copies_merge_to_themselves():
     content = _page("one\ntwo")
-    base, merged, conflicted = sp.merge_aux_copies("$AFP/E/u.ML",
-                                                   [("a", content), ("b", content)])
+    base, merged, conflicted = sp.merge_aux_copies(
+        "$AFP/E/u.ML", [("a", content), ("b", content)], {})
     assert merged == content and not conflicted
 
 
-def test_conflicting_copies_publish_the_id_union():
+def test_divergent_copies_publish_the_tables_base_with_the_id_union():
     a = _page('<a id="mldef"></a>one\ntwo')
     b = _page('<a id="mldef2"></a>one\ntwo')
-    _base, merged, conflicted = sp.merge_aux_copies("$AFP/E/u.ML",
-                                                    [("a", a), ("b", b)])
-    assert conflicted
+    base, merged, conflicted = sp.merge_aux_copies(
+        "$AFP/E/u.ML",
+        [("S/A/AFP/E/u.ML.html", a), ("S/B/AFP/E/u.ML.html", b)],
+        {"AFP/E/u.ML": "S/B"})
+    assert conflicted and base == "S/B/AFP/E/u.ML.html"
     line_one = merged.split("\n")[0]
     assert 'id="mldef"' in line_one and 'id="mldef2"' in line_one
 
 
 def test_an_entity_anchor_element_present_in_one_copy_only_merges():
-    """The amended tolerance's second measured shape (splitter.ML:490): the
-    anchor is a whole element, and the span run splits differently — the
-    TEXT is identical, so the copies merge and the id-union lands."""
+    """splitter.ML:490's measured shape: the anchor is a whole element and
+    the span run splits differently — divergent, so the table picks the
+    base, and the id-union still lands the anchor."""
     a = _page('<span>‹</span><span class="entity_def" id="HOL.split|attribute">'
               '<span>split</span></span><span>›</span>\ntwo')
     b = _page('<span>‹split›</span>\ntwo')
-    _base, merged, conflicted = sp.merge_aux_copies("~~/src/Provers/splitter.ML",
-                                                    [("a", a), ("b", b)])
+    _base, merged, conflicted = sp.merge_aux_copies(
+        "~~/src/Provers/splitter.ML",
+        [("HOL/HOL/ISABELLE_HOME/src/Provers/splitter.ML.html", a),
+         ("FOL/FOL/ISABELLE_HOME/src/Provers/splitter.ML.html", b)],
+        {"ISABELLE_HOME/src/Provers/splitter.ML": "FOL/FOL"})
     assert conflicted and 'id="HOL.split|attribute"' in merged
 
 
-def test_differing_titles_merge_and_the_symbolic_title_wins():
-    """The amended tolerance's first measured shape: the renderer names the
-    file relative to the presenting session; the base is the copy whose
-    title carries the symbolic path."""
-    qualified = ('<html><head><title>File ‹$AFP/E/util.ML›</title></head>'
-                 '<body><pre class="source">one</pre></body></html>')
-    bare = ('<html><head><title>File ‹util.ML›</title></head>'
-            '<body><pre class="source">one</pre></body></html>')
-    base, merged, conflicted = sp.merge_aux_copies(
-        "$AFP/E/util.ML", [("z_sorted_last", qualified), ("a_sorted_first", bare)])
-    assert conflicted
-    assert base == "z_sorted_last" and "‹$AFP/E/util.ML›" in merged
+def test_title_and_h1_canonicalise_for_comparison_and_output():
+    """util.ML's real shape: copies differing ONLY in heading wording are
+    identical after canonicalisation — no table entry needed — and the
+    published headings name the symbolic path, not any session's view."""
+    qualified = ('<html><head>\n<title>File ‹$AFP/E/util.ML›</title>\n</head>'
+                 '<body>\n<h1>File ‹$AFP/E/util.ML›</h1>\n'
+                 '<pre class="source">one</pre></body></html>')
+    bare = ('<html><head>\n<title>File ‹util.ML›</title>\n</head>'
+            '<body>\n<h1>File ‹E/util.ML›</h1>\n'
+            '<pre class="source">one</pre></body></html>')
+    _base, merged, conflicted = sp.merge_aux_copies(
+        "$AFP/E/util.ML", [("z", qualified), ("a", bare)], {})
+    assert not conflicted
+    assert "<title>File ‹$AFP/E/util.ML›</title>" in merged
+    assert "<h1>File ‹$AFP/E/util.ML›</h1>" in merged
 
 
-def test_copies_differing_in_text_stop_the_pass():
+def test_the_canonicalisation_is_element_scoped_not_line_scoped():
+    """The retired tolerance exempted any LINE carrying a title/h1; a real
+    divergence sharing the heading's line must not ride through."""
+    a = ('<html><head>\n<title>File ‹u.ML›</title><b>x</b>\n</head>'
+         '<body><pre class="source">one</pre></body></html>')
+    b = ('<html><head>\n<title>File ‹E/u.ML›</title><b>y</b>\n</head>'
+         '<body><pre class="source">one</pre></body></html>')
     with pytest.raises(sp.SourcePagesError):
-        sp.merge_aux_copies("$AFP/E/u.ML",
-                            [("a", _page("one\ntwo")), ("b", _page("eins\ntwo"))])
+        sp.merge_aux_copies("$AFP/E/u.ML", [("a", a), ("b", b)], {})
 
 
-def test_copies_of_different_lengths_stop_the_pass():
+def test_divergent_copies_without_a_table_entry_stop_the_pass():
     with pytest.raises(sp.SourcePagesError):
-        sp.merge_aux_copies("$AFP/E/u.ML",
-                            [("a", _page("one\ntwo")), ("b", _page("one"))])
+        sp.merge_aux_copies(
+            "$AFP/E/u.ML",
+            [("a", _page("one\ntwo")), ("b", _page("eins\ntwo"))], {})
+
+
+def test_a_table_entry_for_a_group_that_no_longer_diverges_is_a_hard_error():
+    content = _page("one")
+    with pytest.raises(sp.SourcePagesError):
+        sp.merge_aux_copies("$AFP/E/u.ML", [("a", content), ("b", content)],
+                            {"AFP/E/u.ML": "S/A"})
+
+
+def test_a_table_entry_matching_no_copy_is_a_hard_error():
+    with pytest.raises(sp.SourcePagesError):
+        sp.merge_aux_copies(
+            "$AFP/E/u.ML",
+            [("S/A/AFP/E/u.ML.html", _page("one")),
+             ("S/B/AFP/E/u.ML.html", _page("two"))],
+            {"AFP/E/u.ML": "S/C"})
+
+
+def test_copies_of_different_lengths_stop_the_pass_even_with_an_entry():
+    with pytest.raises(sp.SourcePagesError):
+        sp.merge_aux_copies(
+            "$AFP/E/u.ML",
+            [("S/A/AFP/E/u.ML.html", _page("one\ntwo")),
+             ("S/B/AFP/E/u.ML.html", _page("one"))],
+            {"AFP/E/u.ML": "S/A"})
 
 
 # --- the index (D49 ruling 5, copy approved 2026-08-23) -----------------------
@@ -653,6 +701,11 @@ def _fixture(tmp_path, monkeypatch):
     (rendered / "fonts").mkdir(exist_ok=True)
     (rendered / "fonts" / "TestFont.ttf").write_bytes(b"\x00\x01\x80\x99FONT\xff")
 
+    # the conflicting aux pair diverges in id values, so the choice table
+    # must rule; _isolate_aux_base_choices points the default here
+    (tmp_path / "aux-base-choices.json").write_text(
+        json.dumps({"AFP/E/u.ML": "Unsorted/S1"}), encoding="utf-8")
+
     import site_export
     monkeypatch.setattr(site_export, "theory_registry",
                         lambda: {bytes.fromhex(_REG_HASH): "A.A",
@@ -713,6 +766,19 @@ def test_map_publish_and_gate_pass_end_to_end(tmp_path, monkeypatch, capsys):
 
     assert sp.run_gate(published=out, artefact_path=artefact, namespace=None,
                        region="", sample=0) == 0
+
+
+def test_an_orphaned_choice_table_entry_stops_publish(tmp_path, monkeypatch):
+    """A table entry naming a group the tree no longer has — the table must
+    mirror the tree exactly."""
+    repo, rendered, scan_path = _fixture(tmp_path, monkeypatch)
+    artefact = _run_map(tmp_path, repo, rendered, scan_path)
+    (tmp_path / "aux-base-choices.json").write_text(json.dumps(
+        {"AFP/E/u.ML": "Unsorted/S1", "AFP/E/gone.ML": "Unsorted/S1"}),
+        encoding="utf-8")
+    with pytest.raises(sp.SourcePagesError, match="stale entr"):
+        sp.run_publish(rendered=str(rendered), artefact_path=artefact,
+                       out=str(tmp_path / "published"))
 
 
 def test_publish_refuses_a_tree_that_moved_since_the_map(tmp_path, monkeypatch):

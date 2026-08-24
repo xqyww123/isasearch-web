@@ -834,51 +834,101 @@ def _ids_in_tags(text: str) -> 'set[str]':
             for m in re.finditer(r'\bid="([^"]*)"', tag.group(0))}
 
 
-_TITLE_OR_H1 = re.compile(r"<(title|h1)\b")
+# The heading elements whose text names the rendered file.  Content is
+# `[^<]*`: an element carrying nested markup does not match, stays
+# uncanonicalised, and any divergence it hides surfaces in the byte compare.
+_TITLE_TEXT = re.compile(r"(<(title|h1)\b[^>]*>)[^<]*(</\2\s*>)")
+
+
+def aux_base_choices_path() -> str:
+    """The committed choice table (D49 ruling 6 as amended 2026-08-24):
+    published-subtree form of the symbolic path → the rendered session
+    directory whose copy is the base.  Repository-internal input; session
+    directory names in it never reach published output."""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "site", "aux-base-choices.json")
+
+
+def _aux_choice_key(sym: str) -> str:
+    """The table's key for a symbolic path — the published subtree path
+    (`~~/x` → `ISABELLE_HOME/x`), derived from `aux_page` so the two spellings
+    cannot drift."""
+    return aux_page(sym)[len(f"{SITE_PREFIX}_aux/"):-len(".html")]
 
 
 def merge_aux_copies(sym: str, copies: 'list[tuple[str, str]]',
+                     choices: 'dict[str, str]',
                      ) -> 'tuple[str, str, bool]':
-    """D49 ruling 6 as amended 2026-08-23: one auxiliary page per symbolic
+    """D49 ruling 6 as amended 2026-08-24: one auxiliary page per symbolic
     path, publishing the id-union of all copies so every fragment reference
-    keeps landing.  `(base copy's rel, merged content, whether copies
-    conflicted)` — the caller must rewrite the merged content in the BASE
-    copy's directory context, since its reference strings are the base's.
+    keeps landing.  Every copy's `<title>`/`<h1>` text is first canonicalised
+    to ``File ‹{sym}›`` — the page names the file it renders, not the session
+    that happened to render it — for BOTH the comparison and the published
+    output.  After canonicalisation the copies are compared byte-wise: all
+    identical merges with no choice to make; a group with any surviving
+    divergence is resolved only by an explicit entry in the committed choice
+    table (`choices`).  Divergent-without-entry, an entry matching no single
+    copy, and an entry for a group that no longer diverges are all hard
+    errors — the table is an exact mirror of the tree, and every choice in it
+    is a reviewed human ruling, never a heuristic.
 
-    The amended tolerance — the invariant measured true on all 12 real
-    conflicts: copies must agree **line-for-line in text once the title and
-    heading are set aside** (tags erased, `<title>`/`<h1>` lines exempt).
-    That admits the three measured conflict shapes the old byte-level test
-    refused — differing title wording, an entity-anchor *element* present in
-    one copy only, and reference strings resolved through different sessions
-    — while still refusing any real content divergence.  The base copy is the
-    one whose title names the symbolic path (ties broken by sorted rendered
-    location); ids other copies carry on a line become empty anchors at the
-    front of the base's line — same line, same landing."""
-    def title_names_sym(content: str) -> bool:
-        m = re.search(r"<title>([^<]*)</title>", content)
-        return bool(m) and sym in m.group(1)
-
-    ordered = sorted(copies, key=lambda c: (not title_names_sym(c[1]), c[0]))
-    (base_rel, base), *rest = ordered
-    if all(content == base for _rel, content in rest):
-        return base_rel, base, False
-    base_lines = base.split("\n")
-    merged = list(base_lines)
-    for rel, content in rest:
+    `(base copy's rel, merged content, whether the table resolved it)` — the
+    caller must rewrite the merged content in the BASE copy's directory
+    context, since its reference strings are the base's.  Ids other copies
+    carry on a line become empty anchors at the front of the base's line —
+    same line, same landing."""
+    heading = f"File ‹{sym}›"
+    canon = sorted((rel, _TITLE_TEXT.sub(
+                        lambda m: m.group(1) + heading + m.group(3), content))
+                   for rel, content in copies)
+    key = _aux_choice_key(sym)
+    (first_rel, first), *rest = canon
+    if all(content == first for _rel, content in rest):
+        if key in choices:
+            raise SourcePagesError(
+                f"aux-base-choices.json names {key!r} but its copies no "
+                f"longer diverge after canonicalisation — stale entry, "
+                f"remove it")
+        return first_rel, first, False
+    session_dir = choices.get(key)
+    if session_dir is None:
+        first_lines = first.split("\n")
+        parts = []
+        for rel, content in rest:
+            lines = content.split("\n")
+            if len(lines) != len(first_lines):
+                parts.append(f"{rel}: {len(lines)} line(s) against "
+                             f"{first_rel}'s {len(first_lines)}")
+            else:
+                d = [i + 1 for i, (x, y) in enumerate(zip(lines, first_lines))
+                     if x != y]
+                parts.append(f"{rel}: {len(d)} line(s) differ from "
+                             f"{first_rel}, first at line {d[0]}")
+        raise SourcePagesError(
+            f"{len(canon)} copies of {sym} diverge after title/h1 "
+            f"canonicalisation and the choice table has no entry for {key!r} "
+            f"— add one to site/aux-base-choices.json naming the rendered "
+            f"session directory to publish. " + "; ".join(parts))
+    matching = [c for c in canon if c[0].startswith(session_dir + "/")]
+    if len(matching) != 1:
+        raise SourcePagesError(
+            f"aux-base-choices.json maps {key!r} to {session_dir!r}, which "
+            f"matches {len(matching)} of the copies "
+            f"({', '.join(rel for rel, _ in canon)}) — stale entry")
+    base_rel, base = matching[0]
+    merged = base.split("\n")
+    for rel, content in canon:
+        if rel == base_rel:
+            continue
         lines = content.split("\n")
         if len(lines) != len(merged):
             raise SourcePagesError(
                 f"{rel} and {base_rel} render one file with different line "
-                f"counts — beyond D49 ruling 6's amended tolerance")
+                f"counts — the id-union cannot align, beyond even the choice "
+                f"table's reach")
         for i, other in enumerate(lines):
-            if other == base_lines[i]:
+            if other == merged[i]:
                 continue
-            if _TAG.sub("", other) != _TAG.sub("", base_lines[i]) and not (
-                    _TITLE_OR_H1.search(other) or _TITLE_OR_H1.search(base_lines[i])):
-                raise SourcePagesError(
-                    f"{rel} and {base_rel} differ in text at line {i + 1} — "
-                    f"beyond D49 ruling 6's amended tolerance")
             extra = _ids_in_tags(other) - _ids_in_tags(merged[i])
             if extra:
                 anchors = "".join(f'<a id="{x}"></a>' for x in sorted(extra))
@@ -932,7 +982,26 @@ def published_to_rel(page: str) -> str:
     return page[len(SITE_PREFIX):]
 
 
-def run_publish(*, rendered: str, artefact_path: str, out: str) -> None:
+def load_aux_base_choices(path: 'str | None' = None) -> 'dict[str, str]':
+    """The choice table, `{}` when the file does not exist (a tree with no
+    surviving divergence needs no table); anything but a string→string object
+    is a hard error."""
+    path = aux_base_choices_path() if path is None else path
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        table = json.load(f)
+    if not (isinstance(table, dict)
+            and all(isinstance(k, str) and isinstance(v, str)
+                    for k, v in table.items())):
+        raise SourcePagesError(
+            f"{path} must be one JSON object mapping published-subtree "
+            f"symbolic paths to rendered session directories")
+    return table
+
+
+def run_publish(*, rendered: str, artefact_path: str, out: str,
+                aux_choices_path: 'str | None' = None) -> None:
     """The pass (§17.4): one walk driven by the artefact's classification —
     not a fresh tree walk, so publish transforms exactly what the map
     classified; the sealed inventory refuses a tree that moved since, and
@@ -1006,12 +1075,21 @@ def run_publish(*, rendered: str, artefact_path: str, out: str) -> None:
             page = relocation[rel]
             _write(page, _transform(rel, content, page))
 
+        aux_choices = load_aux_base_choices(aux_choices_path)
+        orphaned = set(aux_choices) - {_aux_choice_key(s)
+                                       for s in cls["aux_pages"]}
+        if orphaned:
+            raise SourcePagesError(
+                "aux-base-choices.json names path(s) with no auxiliary page "
+                "group in this tree — stale entr(ies): "
+                + ", ".join(sorted(orphaned)))
         for sym, rels in sorted(cls["aux_pages"].items()):
             copies = []
             for rel in rels:
                 with open(os.path.join(rendered, rel), encoding="utf-8") as f:
                     copies.append((rel, f.read()))
-            base_rel, content, conflicted = merge_aux_copies(sym, copies)
+            base_rel, content, conflicted = merge_aux_copies(sym, copies,
+                                                             aux_choices)
             merged_conflicts += conflicted
             page = aux_page(sym)
             # The merged content is the base copy's wholesale, so the rewrite
