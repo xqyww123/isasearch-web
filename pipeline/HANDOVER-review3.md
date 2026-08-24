@@ -419,7 +419,17 @@ In contrib/isasearch-web (its own repo since this date, pushed to GitHub):
 - Tests: 128 green.  isasearch-web pushed through commit 3e7fc5e (+ this
   handover/gitignore commit); super-repo bumps remain UNPUSHED.
 
-NEXT: §17.8 hosting decision (USER: 5.2GB tree, largest page 23.2MiB vs
-25MiB caps, CoreC++ '+' URL round-trip) and §12.2 Worker.  Housekeeping
-also now includes published.pre-basefix-20260824 (5GB, user may order
-deletion).
+NEXT: §17.8 hosting RULED 2026-08-24 = Cloudflare R2 behind D17's
+isabelle-semantics.qiyuan.me + a /source/* cache-everything edge rule
+(.html is not in Cloudflare's default cache list); chosen over Pages to
+buy out the 25MiB per-file cap (largest page NOW 23.6MiB with marks,
+5.6% headroom) and the 20k-file deployment cap (11,750 files).
+BLOCKED ON USER INPUT: a Cloudflare API token with R2 write +
+qiyuan.me zone edit permissions, and R2 enabled on the account (both
+dashboard actions; secret.sh has only CLOUDFLARE_ACCOUNT_ID and an
+AoA-counter key; wrangler not installed — install on demand).  Then:
+create bucket, upload published/ (5.1GB, content-types), bind the
+domain, add the cache rule, CoreC++ '+' round-trip check, user
+click-through of live source_links.  Then §12.2 step 5, the Worker.
+Housekeeping also now includes published.pre-basefix-20260824 (5GB,
+user may order deletion).

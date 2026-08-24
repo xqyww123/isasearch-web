@@ -4769,3 +4769,18 @@ two facts recorded for that day: the largest page is 23.2 MiB — 7 % under the
 25 MiB per-file cap some static hosts impose, before marks — and `CoreC++` is
 the only name needing a one-time URL round-trip check). Nothing about the
 Worker beyond the shape of `source_link`.
+
+**Ruled 2026-08-24: Cloudflare R2, behind the D17 domain, with an edge
+cache rule.** The published tree is served from an R2 bucket through the
+Cloudflare edge. Cloudflare's default cache list excludes `.html`, so a
+cache rule covering `/source/*` (cache everything, long TTL — a page is
+immutable within a corpus generation) is part of the setup; with it, hot
+pages are edge-cached and R2 origin reads approach zero. Chosen over
+Cloudflare Pages to buy out two quota risks that both sit on the corpus's
+growth path: the 25 MiB per-file cap (largest page measured 23.6 MiB WITH
+marks at the 2026-08-24 re-publish — 5.6 % headroom) and the
+20,000-files-per-deployment cap (11,750 files today). Storage cost ≈
+$0.015/GB·month for 5.1 GB. The `CoreC++` `+` round-trip check runs once
+the bucket serves. Setup needs a Cloudflare API token with R2 write and
+`qiyuan.me` zone edit permissions, and R2 enabled on the account — both
+one-time dashboard actions of the user's.
