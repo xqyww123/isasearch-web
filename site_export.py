@@ -48,7 +48,7 @@ from collections.abc import Iterator
 
 import numpy as np
 
-from ._paths import semantic_DB_dir
+from Isabelle_Semantic_Embedding._paths import semantic_DB_dir
 
 
 class ExportError(RuntimeError):
@@ -270,7 +270,7 @@ def theory_registry() -> 'dict[bytes, str]':
     — and the registry keeps whichever was written last.  That caveat is
     THEORY_HASH_REGISTRY_PLAN.md's R9 and this plan honours it rather than fixing
     it."""
-    from . import theory_hash_registry
+    from Isabelle_Semantic_Embedding import theory_hash_registry
     return {k: theory_hash_registry.decode_entry(v)[0]
             for k, v in theory_hash_registry.iter_items()}
 
@@ -299,7 +299,7 @@ def theories_of(key: bytes, rec, registry: 'dict[bytes, str]') -> 'list[str]':
 
 def vector_store_path(explicit: 'str | None' = None) -> str:
     """The one vector store this export publishes from."""
-    from .semantic_embedding import vector_store_names
+    from Isabelle_Semantic_Embedding.semantic_embedding import vector_store_names
     if explicit:
         return explicit
     names = vector_store_names()
@@ -316,8 +316,8 @@ def vector_reader(stack, path: str):
     Reads the layered stores directly rather than through `Semantic_Vector_Store`,
     which would want an embedding provider and therefore an API key the export has
     no use for — the same shell `snapshot_sync.export` uses."""
-    from .snapshot_sync import _model_of, _local_dimension
-    from .semantic_embedding import Vector_Store, _decode_q15
+    from Isabelle_Semantic_Embedding.snapshot_sync import _model_of, _local_dimension
+    from Isabelle_Semantic_Embedding.semantic_embedding import Vector_Store, _decode_q15
     model = _model_of(os.path.basename(path))
     dimension = _local_dimension(model) if model else None
     if dimension is None:
@@ -341,8 +341,8 @@ def completeness_gate(get_vector) -> int:
     user rejected on 2026-08-12.  The vector store is a lazy cache and a missing
     vector is legal in normal operation, so publishing around one would quietly ship
     a corpus with holes."""
-    from .semantics import Semantic_DB
-    from .snapshot_sync import _ships_predicate
+    from Isabelle_Semantic_Embedding.semantics import Semantic_DB
+    from Isabelle_Semantic_Embedding.snapshot_sync import _ships_predicate
     ships = _ships_predicate()
     shippable = missing = 0
     examples: 'list[str]' = []
@@ -412,7 +412,7 @@ def emit_asset(path: str, *, change_intended: bool) -> 'tuple[dict, str, str]':
 
     The `tokenizer_rule` comparison is the one that catches a rule change: a rule
     that touches no table leaves the file list and the digest alone."""
-    from . import tokenizer_asset
+    from Isabelle_Semantic_Embedding import tokenizer_asset
     asset = tokenizer_asset.build_asset()
     text = tokenizer_asset.serialize(asset)
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -657,8 +657,8 @@ def iter_shippable(sessions, registry, counts) -> 'Iterator[tuple[bytes, object,
     Key order matters twice: it is what makes a re-run resumable from a checkpoint,
     and it is what makes two runs over the same store produce the same sequence."""
     from Isabelle_RPC_Host.universal_key import EntityKind
-    from .semantics import Semantic_DB
-    from .snapshot_sync import _ships_predicate
+    from Isabelle_Semantic_Embedding.semantics import Semantic_DB
+    from Isabelle_Semantic_Embedding.snapshot_sync import _ships_predicate
     ships = _ships_predicate()
     for key, raw in Semantic_DB.iter_items():
         if len(key) == 16:
@@ -782,7 +782,7 @@ def run(*, isabelle_home: str, afp_dir: str, committed_asset: str,
         no_source_links: bool = False) -> str:
     """§8.1 end to end.  Returns the namespace that was written."""
     import contextlib
-    from . import isabelle_tokenizer
+    from Isabelle_Semantic_Embedding import isabelle_tokenizer
 
     # The artefact is resolved FIRST — a pure local read, before the asset
     # comparison, the API key, the separator probe's live upsert and the
@@ -795,7 +795,7 @@ def run(*, isabelle_home: str, afp_dir: str, committed_asset: str,
             "--source-links and --no-source-links contradict each other; "
             "pass exactly one")
     if source_links_path:
-        from . import site_source_pages as ssp
+        import site_source_pages as ssp
         body, links_digest = ssp.load_artefact(source_links_path, "map",
                                                ssp.ARTEFACT_FORMAT)
         source_links = ssp.source_links(body)
@@ -922,7 +922,7 @@ def build_parser(**kw) -> argparse.ArgumentParser:
     """THE option set, stated once.  `isabelle_semantics.py` adopts this parser as its
     `site-export` subparser's parent, so the two ways in cannot drift."""
     p = argparse.ArgumentParser(
-        prog="isabelle-semantics site-export",
+        prog="python site_export.py",
         description="Export the semantic DB into a turbopuffer namespace (§8).",
         **kw)
     p.add_argument("--isabelle-home", help="the distribution tree (default: $ISABELLE_HOME)")

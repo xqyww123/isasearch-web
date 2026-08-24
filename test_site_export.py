@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from Isabelle_Semantic_Embedding import site_export as se
+import site_export as se
 
 
 # --- D24's scope ------------------------------------------------------------

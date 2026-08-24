@@ -225,7 +225,7 @@ def run_scan(*, isabelle_home: str, afp_dir: str, out: str) -> None:
     name-addressed records positioned there — an XOR-prefixed key's 16-byte
     prefix is a pseudo-theory (D13) and never enters."""
     from Isabelle_RPC_Host.universal_key import is_xor_prefixed_key
-    from .site_export import declared_sessions, document_id, iter_shippable, theory_registry
+    from site_export import declared_sessions, document_id, iter_shippable, theory_registry
 
     sessions = declared_sessions(isabelle_home, afp_dir)
     _log(f"{len(sessions)} declared session(s) in scope (D24)")
@@ -559,7 +559,7 @@ def run_map(*, scan_path: str, rendered: str, theories_path: str, out: str,
     and the two source trees (the pipeline is host-generic: every input is a
     path, and the seals below are what make the artefact trustworthy
     wherever it was built)."""
-    from .site_export import theory_registry
+    from site_export import theory_registry
 
     scan, _ = load_artefact(scan_path, "scan", SCAN_FORMAT)
     with open(theories_path, "rb") as f:
@@ -899,7 +899,7 @@ def generate_index(theory_names: 'list[str]') -> str:
     global theory's bare name heads its own small group, its name being its
     natural headword; the rendered session directories are umbrella build
     names and must never leak into anything public)."""
-    from .site_export import session_of
+    from site_export import session_of
     groups: 'dict[str, list[str]]' = {}
     for name in theory_names:
         groups.setdefault(session_of(name), []).append(name)
@@ -1298,7 +1298,7 @@ def _gate_namespace_sample(links: 'dict[str, str]', namespace: str, region: str,
     half-finished patch stopped — fetched by an `id In` filter, and fewer rows
     returned than asked for is itself a failure: a gate must not pass on
     missing evidence."""
-    from .site_export import api_key, request
+    from site_export import api_key, request
     if sample < 2:
         raise SourcePagesError(
             f"--sample {sample} cannot pin both endpoints of the id space; "
@@ -1360,7 +1360,7 @@ def run_patch(*, artefact_path: str, namespace: str, region: str,
     checkpoint advances only after its whole group is confirmed — the export's
     resume story, reused.  The checkpoint pins the artefact's content hash: a
     resume against a different artefact would skip rows whose links changed."""
-    from .site_export import (BATCH_WORKERS, SOURCE_LINK_SCHEMA, _groups,
+    from site_export import (BATCH_WORKERS, SOURCE_LINK_SCHEMA, _groups,
                               api_key, request)
 
     artefact, artefact_hash = load_artefact(artefact_path, "map", ARTEFACT_FORMAT)
@@ -1458,7 +1458,7 @@ def run_patch(*, artefact_path: str, namespace: str, region: str,
 
 def build_parser(**kw) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="python -m Isabelle_Semantic_Embedding.site_source_pages",
+        prog="python site_source_pages.py",
         description="The source-page upload pass (SEMANTIC_SEARCH_SITE_PLAN.md "
                     "§17): scan the corpus, build the file→page map, publish "
                     "the tree, gate it, patch the namespace.", **kw)
@@ -1517,7 +1517,7 @@ def build_parser(**kw) -> argparse.ArgumentParser:
 
 
 def run_from_args(args: argparse.Namespace) -> int:
-    from .site_export import DEFAULT_REGION, ExportError, _default_trees
+    from site_export import DEFAULT_REGION, ExportError, _default_trees
     try:
         if args.step == "scan":
             home, afp = args.isabelle_home, args.afp

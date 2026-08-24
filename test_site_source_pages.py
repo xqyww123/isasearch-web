@@ -12,7 +12,7 @@ import os
 
 import pytest
 
-from Isabelle_Semantic_Embedding import site_source_pages as sp
+import site_source_pages as sp
 
 
 # --- the path functions and D50's predicate ---------------------------------
@@ -653,7 +653,7 @@ def _fixture(tmp_path, monkeypatch):
     (rendered / "fonts").mkdir(exist_ok=True)
     (rendered / "fonts" / "TestFont.ttf").write_bytes(b"\x00\x01\x80\x99FONT\xff")
 
-    from Isabelle_Semantic_Embedding import site_export
+    import site_export
     monkeypatch.setattr(site_export, "theory_registry",
                         lambda: {bytes.fromhex(_REG_HASH): "A.A",
                                  bytes.fromhex("bb" * 16): "A.B",
@@ -888,7 +888,7 @@ def _patch_world(tmp_path, rows_in_namespace):
 
 def test_the_patch_writes_every_id_once_and_pins_the_artefact(tmp_path, monkeypatch):
     artefact, calls, fake_request = _patch_world(tmp_path, 6)
-    from Isabelle_Semantic_Embedding import site_export
+    import site_export
     monkeypatch.setattr(site_export, "request", fake_request)
     monkeypatch.setattr(site_export, "api_key", lambda: "k")
     checkpoint = str(tmp_path / "cp.json")
@@ -903,7 +903,7 @@ def test_the_patch_writes_every_id_once_and_pins_the_artefact(tmp_path, monkeypa
 
 def test_a_count_mismatch_is_refused_without_the_explicit_flag(tmp_path, monkeypatch):
     artefact, _calls, fake_request = _patch_world(tmp_path, 5)
-    from Isabelle_Semantic_Embedding import site_export
+    import site_export
     monkeypatch.setattr(site_export, "request", fake_request)
     monkeypatch.setattr(site_export, "api_key", lambda: "k")
     with pytest.raises(sp.SourcePagesError):
@@ -915,7 +915,7 @@ def test_a_count_mismatch_is_refused_without_the_explicit_flag(tmp_path, monkeyp
 def test_a_checkpoint_for_another_namespace_or_artefact_is_refused(tmp_path,
                                                                    monkeypatch):
     artefact, _calls, fake_request = _patch_world(tmp_path, 6)
-    from Isabelle_Semantic_Embedding import site_export
+    import site_export
     monkeypatch.setattr(site_export, "request", fake_request)
     monkeypatch.setattr(site_export, "api_key", lambda: "k")
     checkpoint = str(tmp_path / "cp.json")
@@ -935,7 +935,7 @@ def test_a_checkpoint_for_another_namespace_or_artefact_is_refused(tmp_path,
 
 def test_a_resume_patches_only_the_remaining_ids(tmp_path, monkeypatch):
     artefact, calls, fake_request = _patch_world(tmp_path, 6)
-    from Isabelle_Semantic_Embedding import site_export
+    import site_export
     monkeypatch.setattr(site_export, "request", fake_request)
     monkeypatch.setattr(site_export, "api_key", lambda: "k")
     _body, digest = sp.load_artefact(artefact, "map", sp.ARTEFACT_FORMAT)
@@ -950,7 +950,7 @@ def test_a_resume_patches_only_the_remaining_ids(tmp_path, monkeypatch):
 def test_a_completed_patch_rerun_does_nothing_and_says_so(tmp_path, monkeypatch,
                                                           capsys):
     artefact, calls, fake_request = _patch_world(tmp_path, 6)
-    from Isabelle_Semantic_Embedding import site_export
+    import site_export
     monkeypatch.setattr(site_export, "request", fake_request)
     monkeypatch.setattr(site_export, "api_key", lambda: "k")
     _body, digest = sp.load_artefact(artefact, "map", sp.ARTEFACT_FORMAT)
@@ -968,7 +968,7 @@ def test_a_non_integer_count_refuses_the_patch_even_with_the_flag(tmp_path,
     # a None count silently satisfied --allow-count-mismatch once; the guard
     # must prove nothing from missing evidence
     artefact, calls, fake_request = _patch_world(tmp_path, None)
-    from Isabelle_Semantic_Embedding import site_export
+    import site_export
     monkeypatch.setattr(site_export, "request", fake_request)
     monkeypatch.setattr(site_export, "api_key", lambda: "k")
     with pytest.raises(sp.SourcePagesError, match="not an\\s+integer"):
@@ -981,7 +981,7 @@ def test_a_non_integer_count_refuses_the_patch_even_with_the_flag(tmp_path,
 def test_an_unwritable_checkpoint_fails_before_any_row_is_patched(tmp_path,
                                                                   monkeypatch):
     artefact, calls, fake_request = _patch_world(tmp_path, 6)
-    from Isabelle_Semantic_Embedding import site_export
+    import site_export
     monkeypatch.setattr(site_export, "request", fake_request)
     monkeypatch.setattr(site_export, "api_key", lambda: "k")
     with pytest.raises(OSError):
@@ -1006,7 +1006,7 @@ def test_the_namespace_sample_is_stratified_and_fails_on_short_return(monkeypatc
             "the slice a half-finished patch wrote first"
         return {"rows": [{"id": i, "source_link": links[i]} for i in chosen[:-1]]}
 
-    from Isabelle_Semantic_Embedding import site_export
+    import site_export
     monkeypatch.setattr(site_export, "request", fake_request)
     monkeypatch.setattr(site_export, "api_key", lambda: "k")
     failures = sp._gate_namespace_sample(links, "ns", "r", sample=4)
@@ -1024,7 +1024,7 @@ def test_the_namespace_sample_pins_both_endpoints(monkeypatch):
         return {"rows": [{"id": i, "source_link": links[i]}
                          for i in seen["chosen"]]}
 
-    from Isabelle_Semantic_Embedding import site_export
+    import site_export
     monkeypatch.setattr(site_export, "request", fake_request)
     monkeypatch.setattr(site_export, "api_key", lambda: "k")
     assert sp._gate_namespace_sample(links, "ns", "r", sample=4) == 0
