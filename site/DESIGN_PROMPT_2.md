@@ -3,9 +3,9 @@
 Drafted 2026-08-24 for the user to paste into Claude Design against the
 existing isasearch canvas project. The switch's two labels and the hover
 text below are the approved copy for the control (D36 as amended
-2026-08-24); after the edit lands they are also recorded in `COPY.md`.
-Item 2c executes D29's kind-filter default, which the user is currently
-reconsidering — if D29 is amended, flip 2c to match before pasting.
+2026-08-24); item 2c executes the kind-filter default as ruled the same
+day (D29 as amended: none selected, empty = no restriction). `COPY.md`
+carries both already.
 
 ---
 
@@ -56,7 +56,10 @@ b. If any total match count is shown anywhere (e.g. "N results" as a
    grand total), remove it. Above the list the only count lines are
    "Showing results 1 to 20" (paged) or "Showing all «7» results" (a
    short list).
-c. The Kind buttons' default state is ALL kinds selected, not none.
+c. The Kind buttons' default state is NONE selected. Do not add any text
+   about what an empty selection means. If the page anywhere shows a
+   blocking message for a cleared kind selection (beginning "You have
+   cleared every kind"), remove that message and the state that shows it.
 d. The result list pages by 20, not 8: 20 cards per page everywhere the
    page count appears.
 

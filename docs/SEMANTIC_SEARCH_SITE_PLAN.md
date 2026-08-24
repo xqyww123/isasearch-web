@@ -82,7 +82,8 @@ subtokens** (D21, §5.4), in five filter panels (D22):
 3. **Theory Name** — the associated theories. What that means differs by kind
    and is stated in the interface (D14, D15, §7.2, §9.2b);
 4. **All** — any of the three above, compiled to an `Or` (§6.3);
-5. **Kind** — a chip group, everything selected by default (D29).
+5. **Kind** — a chip group, nothing selected by default; an empty selection
+   restricts nothing (D29 as amended 2026-08-24).
 
 Serving is fully serverless: Cloudflare Pages + Worker for the front end,
 turbopuffer for vectors *and* filtering, Fireworks for the query embedding. No
@@ -979,6 +980,18 @@ reader of those sections needs to find the decision that used to govern them.
     only would leave someone hunting a constant with no results and no visible
     reason, which is this site's worst failure mode; theorems are 84.9 % of the
     corpus and dominate the ranking anyway.
+
+    **Amended 2026-08-24 (user-ruled): the default is nothing selected, and
+    an empty selection means no kind constraint.** Behaviourally identical to
+    everything-selected — the failure mode above still cannot occur — but the
+    common intent "only this kind" now costs one click instead of ten
+    deselections. Theorems-only as a default was proposed and rejected in the
+    same exchange (it silently excludes the very entity a non-theorem hunt is
+    for). The interface explains nothing about the empty state (user-ruled:
+    readers do not expect an empty filter to return nothing); the old
+    cleared-every-kind blocking state and its message are deleted with this —
+    that state no longer exists. D38's OR reading applies to a non-empty
+    selection; an empty selection sends no kind condition at all.
   - **A search fetches 200 results in one request** and pages in the browser at
     20 a screen; turning a page issues no new request. **200 is the end of the
     result list — there is no "load more" and no second request.** This follows

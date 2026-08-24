@@ -122,7 +122,8 @@ Under the search box, two lines:
 
 *(Draft 2 said "Neither one works without the other", which tells a first-time
 visitor that a filter is mandatory. It is not: the default state has no
-condition and all 11 kinds selected. Both reviewers made this their second
+condition and no kind selected — and an empty kind selection restricts
+nothing (D29 as amended 2026-08-24). Both reviewers made this their second
 finding.)*
 
 ## 3. The Syntactic filters panel group
@@ -222,7 +223,10 @@ behaviour. §12.)*
 
 ### 3.6 The Kind buttons
 
-Eleven buttons, all selected by default (D29):
+Eleven buttons, none selected by default; an empty selection restricts
+nothing, so every kind is eligible until a button is selected (D29 as
+amended 2026-08-24). The interface says nothing about the empty state —
+user-ruled: readers do not expect an empty filter to return nothing.
 
 > Theorem · Named theorems · Constant · Type · Class · Locale · Proof method ·
 > Introduction rule · Elimination rule · Induction rule · Case split
@@ -236,11 +240,11 @@ Hover on **Case split**: *"A case rule: one case for each constructor of a
 datatype, or for each introduction rule of an inductive definition. A rule whose
 name ends in `.split`, such as `option.split`, has the kind Theorem here."*
 
-When no kind is selected. All eleven are selected when the page loads, so this state
-is reachable only by clearing them, and the message says so rather than reading as
-though the site had started switched off:
-
-> You have cleared every kind, so no result can appear. Select at least one.
+*(Draft 4 carried a blocking state for a cleared selection — "You have
+cleared every kind, so no result can appear. Select at least one." — under
+the old all-selected default. The 2026-08-24 amendment makes an empty
+selection the default and gives it the meaning "no restriction", so that
+state no longer exists and its message is deleted.)*
 
 ## 4. The result cards
 
@@ -510,8 +514,7 @@ Shown when no condition is active. The removal controls of §5.2 are absent,
 because there is nothing to remove.
 
 > No entity of the kinds you selected is eligible. Selecting more kinds returns
-> more results; if you select all 11, the kind selection no longer restricts
-> anything.
+> more results; clearing the selection removes the kind restriction entirely.
 
 ### 5.5 — deleted in draft 4
 
