@@ -1081,8 +1081,8 @@ reader of those sections needs to find the decision that used to govern them.
   first `+`, so `session "CoreC++"` — a real AFP entry — declared nothing and its
   2,915 records read as out of scope; and it did not strip `(* … *)`, so six
   commented-out sessions read as declared. Both are fixed in
-  `site_export.py` (this repository's top level since the 2026-08-24
-  migration, §12.1), and the corrected reader admits every
+  `src/site_export.py` (this repository, since the 2026-08-24 migration —
+  §12.1), and the corrected reader admits every
   session any record in the store names. The two readers were run against each other
   over the whole corpus and the six comment cases change **no** record's verdict; the
   `CoreC++` one changes 2,915.
@@ -2510,8 +2510,9 @@ be re-runnable and deterministic.
 ### 8.1 Steps
 
 **Written, 2026-08-20: `site_export.py`** (then a package module reached as
-`isabelle-semantics site-export`; since the 2026-08-24 migration a top-level
-module of this repository, run as `python site_export.py` — §12.1).
+`isabelle-semantics site-export`; since the 2026-08-24 migration
+`src/site_export.py` of this repository, run as
+`python src/site_export.py` — §12.1).
 Every step below is implemented, and every gate
 below has been run against this machine's store — which is the authority's store,
 verified identical whole (§3's preamble). One local pass over the whole corpus takes
@@ -3221,13 +3222,13 @@ will otherwise treat them as authoritative documentation.
 
 **Amended 2026-08-24 — the site moved to its own repository (user-ordered).**
 Everything site-side now lives in `contrib/isasearch-web` (the repository
-this plan sits in): `site_export.py` and `site_source_pages.py` as top-level
-modules (the `isabelle-semantics site-export` subcommand is retired; run
-`python site_export.py` / `python site_source_pages.py`), the two site test
-files, this plan and its companions, `site/`, and the versioned pipeline
-state under `pipeline/` (the handover file, the scan and map artefacts, the
-live-patch checkpoint). The generated published tree is `published/` here,
-git-ignored. The DB library (`Isabelle_Semantic_Embedding`,
+this plan sits in): `src/site_export.py` and `src/site_source_pages.py`
+(the `isabelle-semantics site-export` subcommand is retired; run
+`python src/site_export.py` / `python src/site_source_pages.py`), the two
+site test files under `tests/`, this plan and its companions under `docs/`,
+`site/`, and the versioned pipeline state under `pipeline/` (the handover
+file, the scan and map artefacts, the live-patch checkpoint). The generated
+published tree is `published/` here, git-ignored. The DB library (`Isabelle_Semantic_Embedding`,
 `contrib/Semantic_Embedding`) stays a dependency — the export imports it to
 read the store, and the Python tokenizer remains there. Two consequences
 recorded honestly: D16's one-repository argument below now spans two
@@ -4427,7 +4428,7 @@ itself as a prerequisite of the whole of phase one, which contradicted this; it 
 prerequisite of steps 4 and 5.
 
 **The site export is written, 2026-08-20**, and it carried step 2's asset emission
-with it as expected: `site_export.py` (top level here since the 2026-08-24
+with it as expected: `src/site_export.py` (here since the 2026-08-24
 migration, §12.1; the `isabelle-semantics site-export` subcommand is
 retired). §8.1 says step by step what it does and what each
 gate measured; §12.2's step 4 says what stands between it and a production namespace.

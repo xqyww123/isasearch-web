@@ -1458,7 +1458,7 @@ def run_patch(*, artefact_path: str, namespace: str, region: str,
 
 def build_parser(**kw) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="python site_source_pages.py",
+        prog="python src/site_source_pages.py",
         description="The source-page upload pass (SEMANTIC_SEARCH_SITE_PLAN.md "
                     "§17): scan the corpus, build the file→page map, publish "
                     "the tree, gate it, patch the namespace.", **kw)

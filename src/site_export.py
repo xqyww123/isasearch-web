@@ -370,7 +370,7 @@ def committed_asset_path() -> str:
     JavaScript port read theirs (§16.6).  One file, so the invariant that makes the
     comparison meaningful — the committed asset is the deployed asset — needs no
     second declaration to keep in step."""
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)),
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "site", "tokenizer", "asset.json")
 
 
@@ -922,7 +922,7 @@ def build_parser(**kw) -> argparse.ArgumentParser:
     """THE option set, stated once.  `isabelle_semantics.py` adopts this parser as its
     `site-export` subparser's parent, so the two ways in cannot drift."""
     p = argparse.ArgumentParser(
-        prog="python site_export.py",
+        prog="python src/site_export.py",
         description="Export the semantic DB into a turbopuffer namespace (§8).",
         **kw)
     p.add_argument("--isabelle-home", help="the distribution tree (default: $ISABELLE_HOME)")

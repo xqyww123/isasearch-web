@@ -112,9 +112,7 @@ def test_the_separator_is_something_the_tokenizer_cannot_emit():
     """The whole reason it is safe: no query can contain it, because §5.2 discards
     whitespace before token formation."""
     from Isabelle_Semantic_Embedding import isabelle_tokenizer
-    asset = json.load(open(os.path.join(os.path.dirname(__file__), "site",
-                                        "tokenizer", "asset.json"),
-                           encoding="utf-8"))
+    asset = json.load(open(se.committed_asset_path(), encoding="utf-8"))
     tokenize = isabelle_tokenizer.Tokenizer(asset)
     assert tokenize(se.THEORY_SEPARATOR) == []
 

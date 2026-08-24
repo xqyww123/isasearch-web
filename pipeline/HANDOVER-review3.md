@@ -2,16 +2,17 @@
 
 > **REPO MIGRATION (2026-08-24, user-ordered).** The site subsystem now has its
 > own repository, `contrib/isasearch-web` (branch `main`, GitHub-tracked).
-> Everything this file cites moved there: the code (`site_export.py`,
-> `site_source_pages.py`, both test files — top-level modules now, detached
+> Everything this file cites moved there: the code (`src/site_export.py`,
+> `src/site_source_pages.py`, tests under `tests/` — detached
 > from the `Isabelle_Semantic_Embedding` package layout; that package stays a
-> dependency for DB access), the plan documents, `site/`, and this pipeline
-> state itself. Old → new paths:
+> dependency for DB access), the plan documents under `docs/`, `site/`, and
+> this pipeline state itself. Old → new paths:
 > `~/isasearch-pipeline/*` → `pipeline/*` (this dir);
 > `~/source-link-patch.checkpoint.json` → `pipeline/source-link-patch.checkpoint.json`;
 > `~/isasearch-published/` → `published/` (git-ignored).
 > The `isabelle-semantics site-export` subcommand is gone — run
-> `python site_export.py` / `python site_source_pages.py` from the repo root.
+> `python src/site_export.py` / `python src/site_source_pages.py` from the
+> repo root.
 > Historical sections below keep the old paths verbatim; apply the mapping.
 
 ## Where the project stands (2026-08-23 late)
