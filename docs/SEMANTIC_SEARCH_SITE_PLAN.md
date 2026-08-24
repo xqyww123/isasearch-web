@@ -2369,6 +2369,22 @@ here so that an implementer does not have to invent one; nothing measured
 argues for a different value, and changing it is a ranking-quality question to
 settle against real queries, not a design decision.
 
+**Amended 2026-08-24 — the reader can switch the BM25 leg off
+(user-ruled).** The front end offers a control with exactly two states:
+hybrid retrieval as specified above (the default, D29's locked design), and
+semantic-only — the vector leg alone, one leg fetching 200, no RRF involved,
+the filter tree attached exactly as before and the filter-first guarantee
+unchanged. The escape hatch this buys: a conceptual query whose wording
+happens to collide with many documents' literal words can have its semantic
+results diluted by the BM25 leg; the reader decides, per query. D48 applies
+unchanged in both states — the single leg has raw scores, and they are still
+never shown, so the two states' interfaces behave alike. There is
+deliberately **no BM25-only state**: literal lookup is already served by the
+syntactic filter panels, and a third state would burden every reader for a
+mechanism one panel away — this asymmetry is design, recorded here and NOT
+explained in the interface. The control's visible copy needs the user's
+verbatim approval before it ships.
+
 Unmeasured, and deliberately not a design input: whether turbopuffer bills a
 `multi_query` once or once per leg. Cost is not a constraint on this plan
 (D28), so it does not bear on any choice above. It is settled by reading

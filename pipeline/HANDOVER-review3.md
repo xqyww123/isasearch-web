@@ -424,7 +424,7 @@ isabelle-semantics.qiyuan.me + a /source/* cache-everything edge rule
 (.html is not in Cloudflare's default cache list); chosen over Pages to
 buy out the 25MiB per-file cap (largest page NOW 23.6MiB with marks,
 5.6% headroom) and the 20k-file deployment cap (11,750 files).
-UPLOAD DONE (2026-08-25): the user created bucket `isasearch` (WNAM,
+UPLOAD DONE (2026-08-24): the user created bucket `isasearch` (WNAM,
 S3 endpoint https://532d99283b5aa1e02486ee3fdcb163d5.r2.cloudflarestorage.com)
 and a bucket-scoped Object Read & Write token (secret.sh:
 R2_ISASEARCH_ACCESS_KEY_ID / R2_ISASEARCH_SECRET_ACCESS_KEY).  The whole
