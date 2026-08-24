@@ -847,8 +847,9 @@ reader of those sections needs to find the decision that used to govern them.
   reversed D5 each record carries exactly one `kind`, so the chips are a
   straightforward membership test; `Introduction rule` and `Theorem` are
   disjoint record kinds rather than one containing the other, which is a
-  labelling matter for a tooltip and not a functional one — D29's default of
-  everything selected means most users never meet it. The export additionally
+  labelling matter for a tooltip and not a functional one — under D29's
+  default (nothing selected, restricting nothing, as amended 2026-08-24)
+  most users never meet it. The export additionally
   stores, on every record, the full set of kinds its `(name, entity expression)`
   group appears under, so a card's kind badges are complete and do not vary with
   which group members reached the result set; it is aggregated during the §8.1
