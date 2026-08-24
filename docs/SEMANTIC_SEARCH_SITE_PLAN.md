@@ -4673,10 +4673,13 @@ the test). Finally the pass **generates** `/source/index.html` and
   `site/expected-counters.json` — in git, never in the artefact, so a
   baseline change is a reviewed diff that survives artefact regeneration —
   and the gate **fails** on any counter mismatch; `--update-counters` is the
-  only path a baseline moves by (its refusal rules are under D54). The D50
-  number is expected to move off 232 when the aux-base choice table swaps
-  the smt_word/word_lib bases — that is the alarm doing its job, adopted
-  through the same reviewed update.
+  only path a baseline moves by (its refusal rules are under D54). The
+  review expected the D50 number might move off 232 when the aux-base
+  choice table swapped the smt_word/word_lib bases; measured at the
+  2026-08-24 re-publish, it did not — the swap redirects site-internal
+  references (`Zip_Benchmarks.Word` → `HOL-Library.Word`), which D50
+  never counts — and all three baselines came through the re-publish
+  unchanged.
 
 ### 17.6 The source-link column and the patch
 

@@ -378,3 +378,48 @@ Order of work (all in contrib/isasearch-web since the migration, branch main):
 Housekeeping owed: many unpushed commits both repos (push only origin, only on
 user's word); ~/heaps-AFP-ALL4/ 30GB redundant (user may order deletion);
 human click-through of a few live source_links once hosting is up.
+
+## TREE-SIDE BATCH EXECUTED (2026-08-24) — steps 1-8 above ALL DONE
+
+In contrib/isasearch-web (its own repo since this date, pushed to GitHub):
+- Steps 1-4: merge_aux_copies canonicalises <title>/<h1> to File ‹{sym}›
+  (element-scoped, per-line exemption deleted), byte-compares, resolves
+  divergence ONLY via site/aux-base-choices.json (11 approved entries
+  committed); divergent-without-entry / no-matching-copy / no-longer-
+  divergent / orphaned entries all hard errors.  Real-tree dry run: 22
+  multi-copy groups = 11 identical after canonicalisation + 11
+  table-resolved, bases exactly as ruled.  Amendment text transcribed
+  verbatim into the plan (D49 r6).
+- Step 5: gate twin defences per A1-A5: anchored ^offset_\d+\.\.\d+$
+  fullmatch (defence 1, unconditional fail otherwise) + frozen baseline
+  site/expected-counters.json (defence 2); fail-closed on missing file;
+  gate FAILS on any D50/D51/D54 counter mismatch; inherited -= own;
+  --update-counters refuses while non-counter failures stand, warns+prunes
+  stale pairs, and --rendered cross-checks each newly tolerated pair
+  against the input tree.  A5: renamed-entity-anchor test now asserts
+  FAIL.  Baselines bootstrapped from the real tree WITH the cross-check:
+  D50 232, D51 1 entry, D54 106 pairs — committed.
+- Step 6 riders: F-G2 (pages counted once per pass-2 entry — real figure
+  9,979), F-A8 assert_reference_completeness in publish AND gate, F-A9
+  tree_fingerprint dropped (other two seals docstring-marked audit-only),
+  F-A7's four tests, publish-docstring bulk-precheck fix.  A12's exact
+  finding is unrecoverable from the ciphered review transcripts; the
+  stale binary-target test comment (which asserted the old D54 hole) was
+  rewritten — likely the same item.
+- Step 7: plan transcription done (all five rulings + §12.1 migration
+  amendment + measured no-move of D50).
+- Step 8: re-published (old tree kept at published.pre-basefix-20260824,
+  5GB, deletion is the user's call).  Publish: 10,595 theory pages, 1,139
+  aux pages, 486,346 marks, 11 merged conflicts, D50 232 / D51 1.  Full
+  gate GREEN: 15,970,528 refs, D54 106/425 tolerated under both defences,
+  ALL baselines unchanged (no --update-counters needed).  smt_word.ML now
+  links /source/HOL-Library.Word.html on all 29 hrefs, word_lib.ML on 3
+  (32 total, as predicted); headings canonicalised.  NO re-patch (artefact
+  31a4b060… untouched by design).
+- Tests: 128 green.  isasearch-web pushed through commit 3e7fc5e (+ this
+  handover/gitignore commit); super-repo bumps remain UNPUSHED.
+
+NEXT: §17.8 hosting decision (USER: 5.2GB tree, largest page 23.2MiB vs
+25MiB caps, CoreC++ '+' URL round-trip) and §12.2 Worker.  Housekeeping
+also now includes published.pre-basefix-20260824 (5GB, user may order
+deletion).
