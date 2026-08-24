@@ -1152,7 +1152,10 @@ reader of those sections needs to find the decision that used to govern them.
   experiment already used a `theory_subtokens` field, so its measured figures
   assume this.
 - **D22** (2026-08-12) — **five filter panels, in this order and with these
-  labels**: `Entity Name`, `Expression`, `Theory Name`, `All`, `Kind`. Each of
+  labels**: `Entity Name`, `Expression`, `Theory Name`, `All`, `Kind`.
+  *(Amended 2026-08-24, user-ruled in the design pass: the panel group's
+  visible heading is `Filters`, no longer `Syntactic filters`. The five
+  panel labels are unchanged.)* Each of
   the first three is a repeatable list of single-line conditions, every
   condition carrying its own `contains`/`excludes` toggle (the control model the
   delivered design uses — §9.1). `All` matches a condition against any of the

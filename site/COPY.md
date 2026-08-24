@@ -59,7 +59,7 @@ prefix matching that does not exist. Nothing in the interface may imply it.
 
 | Use | Never use | Why |
 |---|---|---|
-| **panel** — one of the five blocks inside Syntactic filters (D22) | section, group, box | D22 says "panel" |
+| **panel** — one of the five blocks inside the Filters panel group (D22; heading renamed by the user 2026-08-24) | section, group, box | D22 says "panel" |
 | **panel heading** — the panel's title | label | "label" is needed for the kind |
 | **kind label** — the badge on a card | badge, tag, chip | one word for one thing |
 | **condition** — one entry in Entity Name, Expression, Theory Name or All. **A kind selection is not a condition.** | row, filter, term, rule | draft 2 wrote "every condition" of a rule that excludes kinds |
@@ -86,7 +86,7 @@ were settled by the user on 2026-08-14; §11 records them.
 
 ## 2. The landing page
 
-The whole page is the search box, with the Syntactic filters panel group
+The whole page is the search box, with the Filters panel group
 collapsed beneath it.
 
 > **isasearch**
@@ -140,16 +140,16 @@ Hover on the checkbox:
 > the BM25 word-matching results are combined with reciprocal rank fusion
 > (RRF). Cleared: only semantic similarity is used.
 
-## 3. The Syntactic filters panel group
+## 3. The Filters panel group
 
 Collapsed, nothing active:
 
-> **Syntactic filters**
+> **Filters**
 
 Collapsed, with anything active — the two parts appear independently, so that a
 visitor who narrowed only the kinds still sees why the results are narrow:
 
-> **Syntactic filters** · «1 condition» / «3 conditions» · «4 of 11 kinds»
+> **Filters** · «1 condition» / «3 conditions» · «4 of 11 kinds»
 
 Expanded, five panels in this order (D22): **Entity Name**, **Expression**,
 **Theory Name**, **All**, **Kind**.
