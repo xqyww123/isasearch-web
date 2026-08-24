@@ -1,5 +1,19 @@
 # NEXT ACT (post-compact): collect review round 3 turn-2 reports, write the Chinese consolidated report, get user approval, apply fixes, then patch on the user's word
 
+> **REPO MIGRATION (2026-08-24, user-ordered).** The site subsystem now has its
+> own repository, `contrib/isasearch-web` (branch `main`, GitHub-tracked).
+> Everything this file cites moved there: the code (`site_export.py`,
+> `site_source_pages.py`, both test files — top-level modules now, detached
+> from the `Isabelle_Semantic_Embedding` package layout; that package stays a
+> dependency for DB access), the plan documents, `site/`, and this pipeline
+> state itself. Old → new paths:
+> `~/isasearch-pipeline/*` → `pipeline/*` (this dir);
+> `~/source-link-patch.checkpoint.json` → `pipeline/source-link-patch.checkpoint.json`;
+> `~/isasearch-published/` → `published/` (git-ignored).
+> The `isabelle-semantics site-export` subcommand is gone — run
+> `python site_export.py` / `python site_source_pages.py` from the repo root.
+> Historical sections below keep the old paths verbatim; apply the mapping.
+
 ## Where the project stands (2026-08-23 late)
 
 §17 pipeline (SEMANTIC_SEARCH_SITE_PLAN.md, decisions D47–D54) is IMPLEMENTED and has
@@ -274,7 +288,7 @@ gate twin defences + expected-counters.json + plan transcription) -> re-publish
 
 ## NEXT ACT (post-compact 2026-08-24): the tree-side batch — everything below is USER-APPROVED, no further rulings needed
 
-Order of work (all in contrib/Semantic_Embedding, submodule branch master):
+Order of work (all in contrib/isasearch-web since the migration, branch main):
 1. F-M1: merge_aux_copies — canonicalise <title>/<h1> text to "File ‹{sym}›"
    for BOTH comparison and output (regex over the heading element, delete
    _TITLE_OR_H1 and the per-line exemption); multi-line fixtures.
@@ -354,7 +368,7 @@ Order of work (all in contrib/Semantic_Embedding, submodule branch master):
    D50 baseline may move off 232 after the base swap — that is the alarm
    working). Plan wording rule: baseline degrades to wholesale replacement at
    corpus regeneration; the anchored shape predicate is what survives.
-8. Then: re-publish the tree (mv ~/isasearch-published aside, publish, full
+8. Then: re-publish the tree (mv published/ aside, publish, full
    gate; NO re-patch — artefact hash 31a4b060… unchanged by design), verify
    smt_word.ML page now links /source/HOL-Library.Word.html (32 hrefs).
 9. Then §17.8 hosting decision (USER decision: 5.2GB tree, largest page

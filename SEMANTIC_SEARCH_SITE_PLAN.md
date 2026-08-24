@@ -284,6 +284,27 @@ reader of those sections needs to find the decision that used to govern them.
   family's **third standing number**, baseline 106.  Stripping those anchors
   was considered and rejected: the target page is right, and destroying a
   nine-tenths-good link is worse than a top-of-page landing.
+
+  **Amended 2026-08-24 — the twin defences (user-approved after adversarial
+  verification).** The tolerance is no longer open-ended: an inherited miss
+  is tolerated only when **both** defences pass. Defence one is the anchored
+  shape predicate `^offset_\d+\.\.\d+$` — anchored, never a prefix test, so
+  a theory or entity whose name begins with `offset_` cannot ride through.
+  Defence two is membership in the frozen baseline
+  `site/expected-counters.json` (the 106 (page, fragment) pairs, reported as
+  "106 distinct fragments over 425 references"; one fragment is referenced
+  253×). A missing or unreadable baseline file fails the gate **closed**.
+  The baseline moves only through `gate --update-counters`, which refuses a
+  pair failing the shape predicate, refuses to run while any other gate
+  failure is outstanding, warns about and prunes stale entries, and
+  (recommended, adopted) cross-checks each newly tolerated pair against the
+  rendered tree to confirm the miss is the input's own. Any mismatch of the
+  three standing counters — D50, D51, D54 — now **fails** the gate instead
+  of being logged. Bookkeeping ruled with it: a page claimed by both
+  provenance buckets counts once (inherited −= own). Stated plainly as a
+  limitation: at a corpus regeneration the baseline degrades to a wholesale
+  replacement, and defence one — the anchored shape — is what survives
+  regenerations.
 - **D53** (2026-08-23) — **the `.thy` resolver is a table lookup over
   `data/theories.json`; the three-step resolver is retired unimplemented.**
   The user rejected resolving file→theory identity through entity keys and
@@ -465,6 +486,34 @@ reader of those sections needs to find the decision that used to govern them.
      difference stops the pass.* The measured baselines move with it:
      **1,139** symbolic paths from **1,165** rendered copies (§17.2's
      1,399/1,466 was stale).
+
+     **Amended again, 2026-08-24.** The merged auxiliary page's `<title>` and
+     `<h1>` are rewritten to the symbolic path — the page names the file it
+     renders, not the session that happened to render it — and the tolerance
+     compares copies with the heading elements' text canonicalised rather
+     than exempting any line that contains one.
+
+     The base copy is no longer chosen by a rule. After canonicalisation the
+     copies are compared byte-wise. A group whose copies are all identical
+     merges with no choice to make. A group with any surviving divergence is
+     resolved only by an explicit entry in the committed choice table
+     `site/aux-base-choices.json`, mapping the symbolic path to the rendered
+     session directory whose copy is published. A divergent group absent from
+     the table is a hard error naming every copy and a divergence summary; an
+     entry naming a copy that no longer exists, or a group that no longer
+     diverges, is equally a hard error — the table is an exact mirror of the
+     tree, and every choice in it is a reviewed human ruling, never a
+     heuristic. The table is repository-internal input; session directory
+     names in it never reach published output.
+
+     Measured 2026-08-24 on the real tree: 22 multi-copy groups; 10 identical
+     after canonicalisation; 11 divergent — nine `src/Provers/` and
+     `src/Tools/` files loaded by both HOL and FOL (the table picks the HOL
+     rendering, the context this site's data lives in), and
+     `smt_word.ML`/`word_lib.ML`, whose umbrella copies record the Zippy
+     benchmark's re-load of the same physical file and link `Word.word` to
+     `Zip_Benchmarks.Word`, an unrelated AFP file, where the distribution's
+     own copies link `HOL-Library.Word` (the table picks `HOL/HOL-Library`).
 - **D48** (2026-08-21) — **fusion is server-side, and no relevance number is
   displayed anywhere.** §16.8's measurement showed turbopuffer's `rerank_by:
   ["RRF"]` drops the per-leg scores, so the vector leg's cosine similarity that
@@ -1032,7 +1081,8 @@ reader of those sections needs to find the decision that used to govern them.
   first `+`, so `session "CoreC++"` — a real AFP entry — declared nothing and its
   2,915 records read as out of scope; and it did not strip `(* … *)`, so six
   commented-out sessions read as declared. Both are fixed in
-  `Isabelle_Semantic_Embedding/site_export.py`, and the corrected reader admits every
+  `site_export.py` (this repository's top level since the 2026-08-24
+  migration, §12.1), and the corrected reader admits every
   session any record in the store names. The two readers were run against each other
   over the whole corpus and the six comment cases change **no** record's verdict; the
   `CoreC++` one changes 2,915.
@@ -2459,8 +2509,10 @@ be re-runnable and deterministic.
 
 ### 8.1 Steps
 
-**Written, 2026-08-20: `Isabelle_Semantic_Embedding/site_export.py`, reached as
-`isabelle-semantics site-export`.** Every step below is implemented, and every gate
+**Written, 2026-08-20: `site_export.py`** (then a package module reached as
+`isabelle-semantics site-export`; since the 2026-08-24 migration a top-level
+module of this repository, run as `python site_export.py` — §12.1).
+Every step below is implemented, and every gate
 below has been run against this machine's store — which is the authority's store,
 verified identical whole (§3's preamble). One local pass over the whole corpus takes
 9 minutes 19 seconds and produces **1,337,025 documents**: §3.1's exportable figure
@@ -3167,6 +3219,26 @@ will otherwise treat them as authoritative documentation.
 
 ### 12.1 Layout (D16)
 
+**Amended 2026-08-24 — the site moved to its own repository (user-ordered).**
+Everything site-side now lives in `contrib/isasearch-web` (the repository
+this plan sits in): `site_export.py` and `site_source_pages.py` as top-level
+modules (the `isabelle-semantics site-export` subcommand is retired; run
+`python site_export.py` / `python site_source_pages.py`), the two site test
+files, this plan and its companions, `site/`, and the versioned pipeline
+state under `pipeline/` (the handover file, the scan and map artefacts, the
+live-patch checkpoint). The generated published tree is `published/` here,
+git-ignored. The DB library (`Isabelle_Semantic_Embedding`,
+`contrib/Semantic_Embedding`) stays a dependency — the export imports it to
+read the store, and the Python tokenizer remains there. Two consequences
+recorded honestly: D16's one-repository argument below now spans two
+repositories (the Python tokenizer beside the DB, the JavaScript port and
+the shared asset here), so the §16.6 gate's asset-equivalence checks are the
+anti-drift enforcement and its CI must see both repositories — an
+operational point to settle when CI is wired, not decided here; and the
+"ship the export in the conda package" clause at this section's end is
+retired with the subcommand. The paragraphs below predate the migration and
+keep their original wording as the record of D16 as first ruled.
+
 The site lives in this repository because the tokenizer has two
 implementations that must not drift (§5.5); one repository and one CI run is
 what enforces that, and version-number coordination across repositories would
@@ -3226,14 +3298,14 @@ site/review/              the evidence of the §5 review §16.7 required: the br
                           the frozen bar, four lens reports and the rebuttal
 ```
 
-**Two plans this document cites live at the MLML checkout root, not beside it**, and
-the citation convention here gives no path, so they read as though they were
-neighbours: `BUG_UNIVERSAL_KEY_SHORT_NAME_FIX_PLAN.md` (D33) and
-`THEORY_HASH_REKEY_PLAN.md` (D33's G1). Everything else this plan cites —
-`ENTITY_POSITION_PLAN.md`, `THEORY_HASH_REGISTRY_PLAN.md`,
+**The plans this document cites live in three places since the 2026-08-24
+migration**, and the citation convention here gives no path:
+`BUG_UNIVERSAL_KEY_SHORT_NAME_FIX_PLAN.md` (D33) and
+`THEORY_HASH_REKEY_PLAN.md` (D33's G1) at the MLML checkout root; the DB-side
+plans — `ENTITY_POSITION_PLAN.md`, `THEORY_HASH_REGISTRY_PLAN.md`,
 `DYNAMIC_MEMBER_NAMING_PLAN.md`, `VECTOR_INVALIDATION_PLAN.md`,
-`SEMANTIC_DB_LAYERED_PLAN.md` and the companion
-`SEMANTIC_SEARCH_SITE_PLAN_DONE.md` — is in this directory.
+`SEMANTIC_DB_LAYERED_PLAN.md` — in `contrib/Semantic_Embedding`; and the
+companion `SEMANTIC_SEARCH_SITE_PLAN_DONE.md` beside this file.
 
 The export belongs to the Python package, not to `site/`: it reads LMDB, reuses
 the Python tokenizer, and should ship in the conda package so that others can
@@ -4355,8 +4427,9 @@ itself as a prerequisite of the whole of phase one, which contradicted this; it 
 prerequisite of steps 4 and 5.
 
 **The site export is written, 2026-08-20**, and it carried step 2's asset emission
-with it as expected: `Isabelle_Semantic_Embedding/site_export.py`, reached as
-`isabelle-semantics site-export`. §8.1 says step by step what it does and what each
+with it as expected: `site_export.py` (top level here since the 2026-08-24
+migration, §12.1; the `isabelle-semantics site-export` subcommand is
+retired). §8.1 says step by step what it does and what each
 gate measured; §12.2's step 4 says what stands between it and a production namespace.
 
 Both of those decisions have since been taken and executed: the namespace name
@@ -4582,7 +4655,9 @@ the test). Finally the pass **generates** `/source/index.html` and
   one inherited from the rendered pages is still checked but a miss is
   counted and reported — the renderer emits `offset_…` references it never
   anchors (106 today), and an inherited miss is a top-of-page landing, not
-  a broken page.
+  a broken page. As amended 2026-08-24 (see D54): tolerated only under the
+  twin defences — the anchored `^offset_\d+\.\.\d+$` shape AND membership
+  in the committed baseline `site/expected-counters.json`.
 - Every row's `source_link` from the namespace (sampled or dumped) is either
   empty or string-equal to a path the published tree serves with the named
   mark present — the end-to-end clause D49 ruling 2 bought.
@@ -4592,7 +4667,15 @@ the test). Finally the pass **generates** `/source/index.html` and
   inherited-fragment-miss count (D54, baseline 106), and the coverage
   figures — positioned 99.28 %, linked 99.28 % minus the residue.  The three
   D50/D51/D54 counters are the standing alarm for every future data update:
-  read three numbers instead of re-auditing the tree.
+  read three numbers instead of re-auditing the tree.  As ruled 2026-08-24:
+  the baselines for all three live in the committed
+  `site/expected-counters.json` — in git, never in the artefact, so a
+  baseline change is a reviewed diff that survives artefact regeneration —
+  and the gate **fails** on any counter mismatch; `--update-counters` is the
+  only path a baseline moves by (its refusal rules are under D54). The D50
+  number is expected to move off 232 when the aux-base choice table swaps
+  the smt_word/word_lib bases — that is the alarm doing its job, adopted
+  through the same reviewed update.
 
 ### 17.6 The source-link column and the patch
 
@@ -4613,6 +4696,24 @@ shipping a silently empty link. Every future export carries the column from
 the start —
 same lesson as `from_collection`'s schema note. `site_export.py`'s schema and
 `build_document` gain the field; the resolver's output file is their input.
+
+**Executed 2026-08-24, on the user's explicit go.** All 1,337,009 rows
+patched; the row count is unchanged before and after; 48 HTTP 429
+backpressure events were absorbed by the widened retry budget (12 attempts,
+`Retry-After` honoured over the local schedule, jitter). The checkpoint
+(`pipeline/source-link-patch.checkpoint.json`) pins done = 1,337,009 and the
+map artefact
+`31a4b060cfb1e56383326b1247f3b682c9f97f464b436e3a4fb804dad5bd4406`.
+Post-checks all green: the full gate plus namespace samples of 500 and 1000
+(endpoint-pinned, zero failures), an idempotent re-patch (no-op), and a
+repeat 1000-sample after a ten-minute indexing settle. Two operational facts
+ruled binding: (1) naming the column in `include_attributes` **before** the
+patch is HTTP 400 (measured on the pre-run drill) — never run
+`gate --namespace` against a namespace the patch has not reached; (2) the
+patch never runs again for this corpus — tree-side fixes ride a later
+re-publish, which leaves the artefact hash and every composed `source_link`
+byte-identical by design, and every future export composes the column itself
+(`--source-links` required, `--no-source-links` the explicit opt-out).
 
 ### 17.7 Acceptance, and the tests that come with the code
 
