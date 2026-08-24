@@ -3,8 +3,9 @@
 Drafted 2026-08-24 for the user to paste into Claude Design against the
 existing isasearch canvas project. The checkbox's label is the user's
 own sentence verbatim; the hover text is its approved companion (D36 as
-amended 2026-08-24). Item 2c executes the kind-filter default as ruled
-the same day (D29 as amended: none selected, empty = no restriction).
+amended 2026-08-24). The kind-filter default needs no fix: the mockup's
+none-selected default, a defect under the old D29, is exactly what the
+amended D29 (none selected, empty = no restriction) asks for.
 `COPY.md` carries all of it.
 
 ---
@@ -60,13 +61,9 @@ b. If any total match count is shown anywhere, remove it. This includes
    semantic similarity" phrase and the timing all go. Above the list the
    only count lines are "Showing results 1 to 20" (paged) or "Showing
    all «7» results" (a short list).
-c. The Kind buttons' default state is NONE selected. Do not add any text
-   about what an empty selection means. If the page anywhere shows a
-   blocking message for a cleared kind selection (beginning "You have
-   cleared every kind"), remove that message and the state that shows it.
-d. The result list pages by 20, not 8: 20 cards per page everywhere the
+c. The result list pages by 20, not 8: 20 cards per page everywhere the
    page count appears.
-e. Every result card shows a relevance percentage at its top right
+d. Every result card shows a relevance percentage at its top right
    ("91%", "89%", …). Remove it. No relevance score, percentage or
    ranking number appears anywhere on the page, on any card, in any
    state.
