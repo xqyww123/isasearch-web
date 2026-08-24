@@ -126,6 +126,19 @@ condition and no kind selected — and an empty kind selection restricts
 nothing (D29 as amended 2026-08-24). Both reviewers made this their second
 finding.)*
 
+Under those lines, a checkbox, selected by default (D36 as amended
+2026-08-24). Its visible label is this whole sentence, the user's own
+words verbatim:
+
+> Additionally uses the BM25 word-matching algorithm to improve the
+> results. Clear it if you want a pure semantic search.
+
+Hover on the checkbox:
+
+> Selected: the semantic-similarity results (from the embedding model) and
+> the BM25 word-matching results are combined with reciprocal rank fusion
+> (RRF). Cleared: only semantic similarity is used.
+
 ## 3. The Syntactic filters panel group
 
 Collapsed, nothing active:
