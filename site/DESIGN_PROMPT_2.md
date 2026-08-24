@@ -19,12 +19,13 @@ is.
 
 1. Add a ranking-mode switch.
 
-The landing page currently shows the search box, and under it two
-explanatory paragraphs (the first begins "A query is required.", the
-second begins "Do you remember only part of a name?"). Insert the new
-control between the search box and those two paragraphs, right-aligned,
-as a compact two-state segmented control styled like the page's existing
-chip/pill controls:
+The landing page currently shows the search box, and under it one
+explanatory paragraph (it begins "A natural-language query is required" —
+or "A query is required." in a later revision; either way it is the only
+paragraph between the search box and the SYNTACTIC FILTERS panel).
+Insert the new control between the search box and that paragraph,
+left-aligned with the search box, as a compact two-state segmented
+control styled like the page's existing chip/pill controls:
 
   Leading label:  "Rank by"
   State 1 (selected by default):  "meaning and wording"
