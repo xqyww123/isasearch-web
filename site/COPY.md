@@ -126,9 +126,10 @@ condition and no kind selected — and an empty kind selection restricts
 nothing (D29 as amended 2026-08-24). Both reviewers made this their second
 finding.)*
 
-Under those lines, a checkbox, selected by default (D36 as amended
-2026-08-24). Its visible label is this whole sentence, the user's own
-words verbatim:
+A checkbox, selected by default, in the panel group's `Ranking` row
+(placed there by the user's 2026-08-24 design pass — the mockup decides
+placement, §9.1b; D36 as amended 2026-08-24). Its visible label is this
+whole sentence, the user's own words verbatim:
 
 > Additionally uses the BM25 word-matching algorithm to improve the
 > results. Clear it if you want a pure semantic search.
