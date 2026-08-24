@@ -17,11 +17,13 @@ import site_source_pages as sp
 
 @pytest.fixture(autouse=True)
 def _isolate_aux_base_choices(monkeypatch, tmp_path):
-    """Keep the repository's real site/aux-base-choices.json out of the test
-    trees: the default table path becomes a nonexistent tmp file (= empty
-    table) unless a test passes its own."""
+    """Keep the repository's real site/ tables out of the test trees: the
+    default choice-table and baseline paths become tmp files a test (or
+    `_fixture`) may write."""
     monkeypatch.setattr(sp, "aux_base_choices_path",
                         lambda: str(tmp_path / "aux-base-choices.json"))
+    monkeypatch.setattr(sp, "expected_counters_path",
+                        lambda: str(tmp_path / "expected-counters.json"))
 
 
 # --- the path functions and D50's predicate ---------------------------------
@@ -705,6 +707,14 @@ def _fixture(tmp_path, monkeypatch):
     # must rule; _isolate_aux_base_choices points the default here
     (tmp_path / "aux-base-choices.json").write_text(
         json.dumps({"AFP/E/u.ML": "Unsorted/S1"}), encoding="utf-8")
+    # the alarm baselines this fixture tree produces (the gate fails closed
+    # without them): 2 exempted externals, 1 stripped anchor, no D54 misses
+    (tmp_path / "expected-counters.json").write_text(json.dumps({
+        "external references exempted (D50)": 2,
+        "dangling anchors stripped (D51)":
+            [["Unsorted/S1/A.A.html", "sat_data/ghost.grat.xz.html"]],
+        "inherited fragment misses (D54)": [],
+    }), encoding="utf-8")
 
     import site_export
     monkeypatch.setattr(site_export, "theory_registry",
@@ -829,24 +839,134 @@ def test_the_gate_counts_a_missing_mark(tmp_path, monkeypatch):
                        region="", sample=0) >= 1
 
 
-def test_an_inherited_fragment_miss_is_reported_not_failed(tmp_path, monkeypatch,
-                                                           capsys):
-    """D54: every fragment is still checked, but one inherited from the
-    rendered pages that misses is counted — the reader lands at the top of
-    the right page — while the pipeline's own fragments stay zero-miss."""
+def _published_fixture(tmp_path, monkeypatch):
     repo, rendered, scan_path = _fixture(tmp_path, monkeypatch)
     artefact = _run_map(tmp_path, repo, rendered, scan_path)
     out = str(tmp_path / "published")
     sp.run_publish(rendered=str(rendered), artefact_path=artefact, out=out)
+    return rendered, artefact, out
+
+
+def _append_ref(out, page, ref):
+    path = os.path.join(out, page)
+    with open(path, encoding="utf-8") as f:
+        content = f.read()
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content.replace("</body>", f'<a href="{ref}">x</a></body>'))
+
+
+def _write_expected(tmp_path, d54_pairs):
+    (tmp_path / "expected-counters.json").write_text(json.dumps({
+        "external references exempted (D50)": 2,
+        "dangling anchors stripped (D51)":
+            [["Unsorted/S1/A.A.html", "sat_data/ghost.grat.xz.html"]],
+        "inherited fragment misses (D54)": d54_pairs,
+    }), encoding="utf-8")
+
+
+def test_a_renamed_entity_anchor_fails_the_gate_despite_being_inherited(
+        tmp_path, monkeypatch):
+    """D54's defence one (2026-08-24): the tolerance covers only the
+    renderer's anchored offset shape — a missing entity-name fragment is a
+    real loss and FAILS, exactly the hole the retired test asserted."""
+    _rendered, artefact, out = _published_fixture(tmp_path, monkeypatch)
     target = os.path.join(out, "A.B.html")
     with open(target, encoding="utf-8") as f:
         content = f.read()
     with open(target, "w", encoding="utf-8") as f:
         f.write(content.replace('id="A.B.foo|fact"', 'id="renamed"'))
     assert sp.run_gate(published=out, artefact_path=artefact, namespace=None,
+                       region="", sample=0) >= 1
+
+
+def test_an_offset_miss_in_the_baseline_is_tolerated(tmp_path, monkeypatch,
+                                                     capsys):
+    """Both defences pass: offset-shaped AND in the committed baseline — the
+    reader lands at the top of the right page, and the gate stays green."""
+    _rendered, artefact, out = _published_fixture(tmp_path, monkeypatch)
+    _append_ref(out, "A.A.html", "/source/A.B.html#offset_1..2")
+    _write_expected(tmp_path, [["A.B.html", "offset_1..2"]])
+    assert sp.run_gate(published=out, artefact_path=artefact, namespace=None,
                        region="", sample=0) == 0
-    assert "reported, not failed (D54): 1 inherited fragment(s)" \
+    assert "tolerated (D54 twin defences): 1 distinct fragment(s) over " \
+           "1 reference(s)" in capsys.readouterr().out
+
+
+def test_an_offset_miss_outside_the_baseline_fails(tmp_path, monkeypatch):
+    _rendered, artefact, out = _published_fixture(tmp_path, monkeypatch)
+    _append_ref(out, "A.A.html", "/source/A.B.html#offset_1..2")
+    assert sp.run_gate(published=out, artefact_path=artefact, namespace=None,
+                       region="", sample=0) >= 1
+
+
+def test_a_stale_baseline_pair_fails(tmp_path, monkeypatch):
+    _rendered, artefact, out = _published_fixture(tmp_path, monkeypatch)
+    _write_expected(tmp_path, [["A.B.html", "offset_9..9"]])
+    assert sp.run_gate(published=out, artefact_path=artefact, namespace=None,
+                       region="", sample=0) >= 1
+
+
+def test_a_missing_baseline_file_fails_the_gate_closed(tmp_path, monkeypatch):
+    _rendered, artefact, out = _published_fixture(tmp_path, monkeypatch)
+    os.remove(tmp_path / "expected-counters.json")
+    with pytest.raises(sp.SourcePagesError, match="fails closed"):
+        sp.run_gate(published=out, artefact_path=artefact, namespace=None,
+                    region="", sample=0)
+
+
+def test_update_counters_adopts_prunes_and_the_diff_is_the_review(
+        tmp_path, monkeypatch, capsys):
+    """--update-counters writes the observed numbers (cross-checked against
+    the rendered tree), and a later run prunes what stopped missing."""
+    rendered, artefact, out = _published_fixture(tmp_path, monkeypatch)
+    page = os.path.join(out, "A.A.html")
+    with open(page, encoding="utf-8") as f:
+        before = f.read()
+    _append_ref(out, "A.A.html", "/source/A.B.html#offset_1..2")
+    sp.run_gate(published=out, artefact_path=artefact, namespace=None,
+                region="", sample=0, update_counters=True,
+                rendered=str(rendered))
+    with open(tmp_path / "expected-counters.json", encoding="utf-8") as f:
+        adopted = json.load(f)
+    assert adopted["inherited fragment misses (D54)"] == [["A.B.html",
+                                                           "offset_1..2"]]
+    assert sp.run_gate(published=out, artefact_path=artefact, namespace=None,
+                       region="", sample=0) == 0
+    with open(page, "w", encoding="utf-8") as f:      # the ref goes away again
+        f.write(before)
+    sp.run_gate(published=out, artefact_path=artefact, namespace=None,
+                region="", sample=0, update_counters=True)
+    assert "pruning stale baseline pair A.B.html#offset_1..2" \
         in capsys.readouterr().out
+    with open(tmp_path / "expected-counters.json", encoding="utf-8") as f:
+        assert json.load(f)["inherited fragment misses (D54)"] == []
+
+
+def test_update_counters_refuses_while_another_failure_is_outstanding(
+        tmp_path, monkeypatch):
+    _rendered, artefact, out = _published_fixture(tmp_path, monkeypatch)
+    os.remove(os.path.join(out, "index.html"))
+    with pytest.raises(sp.SourcePagesError, match="refuses"):
+        sp.run_gate(published=out, artefact_path=artefact, namespace=None,
+                    region="", sample=0, update_counters=True)
+
+
+def test_update_counters_cross_check_refuses_a_fragment_the_input_anchors(
+        tmp_path, monkeypatch):
+    """The pair is offset-shaped and missing in the PUBLISHED page, but the
+    rendered input DOES anchor it — our loss, never tolerable."""
+    rendered, artefact, out = _published_fixture(tmp_path, monkeypatch)
+    _append_ref(out, "A.A.html", "/source/A.B.html#offset_5..6")
+    src = rendered / "Unsorted/S1/A.B.html"
+    with open(src, encoding="utf-8") as f:
+        content = f.read()
+    with open(src, "w", encoding="utf-8") as f:
+        f.write(content.replace("</body>",
+                                '<a id="offset_5..6"></a></body>'))
+    with pytest.raises(sp.SourcePagesError, match="DOES anchor"):
+        sp.run_gate(published=out, artefact_path=artefact, namespace=None,
+                    region="", sample=0, update_counters=True,
+                    rendered=str(rendered))
 
 
 def test_the_gate_ignores_external_references_and_counts_them(tmp_path, monkeypatch,
@@ -922,11 +1042,11 @@ def test_a_fragment_into_a_binary_target_reports_instead_of_crashing(tmp_path,
     with open(page, "w", encoding="utf-8") as f:
         f.write(content.replace(
             "</body>", '<a href="/source/fonts/TestFont.ttf#x">f</a></body>'))
-    # an INHERITED fragment into a binary target: never opened as UTF-8, and
-    # under D54 the miss is counted, not failed — no crash either way
+    # an INHERITED fragment into a binary target: never opened as UTF-8 — the
+    # miss FAILS (defence one: `x` is no offset shape) without a traceback
     assert sp.run_gate(published=out, artefact_path=artefact, namespace=None,
-                       region="", sample=0) == 0
-    assert "reported, not failed (D54)" in capsys.readouterr().out
+                       region="", sample=0) >= 1
+    assert "not the renderer's offset" in capsys.readouterr().out
 
 
 # --- the patch (§17.6), with a stubbed API ------------------------------------

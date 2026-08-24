@@ -1179,8 +1179,53 @@ def run_publish(*, rendered: str, artefact_path: str, out: str,
 # §17.5 — the link-check gate
 # ---------------------------------------------------------------------------
 
+# D54 defence one (A1): the renderer's own unanchored reference shape,
+# ANCHORED — never a prefix test, so a theory or entity whose name begins
+# with `offset_` cannot ride through.
+_OFFSET_FRAGMENT = re.compile(r"offset_\d+\.\.\d+")
+
+
+def expected_counters_path() -> str:
+    """The committed alarm baselines (ruled 2026-08-24): in git, never in the
+    artefact, so a baseline change is a reviewed diff that survives artefact
+    regeneration."""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "site", "expected-counters.json")
+
+
+_EXPECTED_D50 = "external references exempted (D50)"
+_EXPECTED_D51 = "dangling anchors stripped (D51)"
+_EXPECTED_D54 = "inherited fragment misses (D54)"
+
+
+def load_expected_counters(path: 'str | None' = None,
+                           ) -> 'dict | None':
+    """The baseline file's content, or None when it does not exist — the
+    caller decides whether that fails closed (the gate) or starts an adoption
+    (`--update-counters`).  A malformed file is always a hard error."""
+    path = expected_counters_path() if path is None else path
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        expected = json.load(f)
+    if not (isinstance(expected, dict)
+            and isinstance(expected.get(_EXPECTED_D50), int)
+            and isinstance(expected.get(_EXPECTED_D51), list)
+            and isinstance(expected.get(_EXPECTED_D54), list)
+            and all(isinstance(p, list) and len(p) == 2
+                    and all(isinstance(x, str) for x in p)
+                    for p in expected[_EXPECTED_D54])):
+        raise SourcePagesError(
+            f"{path} must carry {_EXPECTED_D50!r} (int), {_EXPECTED_D51!r} "
+            f"(list of stripped entries) and {_EXPECTED_D54!r} (list of "
+            f"[page, fragment] pairs)")
+    return expected
+
+
 def run_gate(*, published: str, artefact_path: str, namespace: 'str | None',
-             region: str, sample: int) -> int:
+             region: str, sample: int, expected_path: 'str | None' = None,
+             update_counters: bool = False,
+             rendered: 'str | None' = None) -> int:
     """The gate, over the published tree: every needed (file, line) has its
     mark, every site-internal reference in every published file resolves —
     fragments included, no anchor trusted — and every non-empty composed link
@@ -1194,7 +1239,17 @@ def run_gate(*, published: str, artefact_path: str, namespace: 'str | None',
     alarm family's third number), because the renderer itself emits
     `offset_…` references it never anchors, and an inherited miss lands the
     reader at the top of the right page — D47's silent, harmless
-    degradation.  Target-major two passes: references are collected first,
+    degradation.  As amended 2026-08-24, that tolerance has twin defences:
+    the miss's fragment must match the ANCHORED `offset_<a>..<b>` shape
+    (defence one), and the (page, fragment) pair must be in the committed
+    baseline `site/expected-counters.json` (defence two) — a missing
+    baseline file fails the gate closed, and any mismatch of the three
+    standing counters (D50 count, D51 stripped entries, D54 pairs) FAILS the
+    gate.  The baseline moves only through `--update-counters`, which
+    refuses while any non-counter failure is outstanding, warns about and
+    prunes stale entries, and — given `--rendered` — confirms each newly
+    tolerated pair is already missing in the input tree.  Target-major two
+    passes: references are collected first,
     then each *fragment-bearing* target is read once for its ids and dropped
     — memory is one page's ids (source pages are read once per pass, so a
     page that is also a target is read twice; that is the price of not
@@ -1227,6 +1282,7 @@ def run_gate(*, published: str, artefact_path: str, namespace: 'str | None',
     # fragments this pipeline composed (row links, needed marks).
     wanted: 'dict[str, set[str]]' = {}      # inherited: rel -> fragments (may hold "")
     wanted_own: 'dict[str, set[str]]' = {}  # ours: rel -> fragments, zero-miss
+    inherited_refs: 'dict[tuple[str, str], int]' = {}  # occurrences per pair
     external = 0
     checked_refs = 0
     for rel in sorted(files):
@@ -1256,6 +1312,9 @@ def run_gate(*, published: str, artefact_path: str, namespace: 'str | None',
                 fail(f"{rel} references {ref!r}, which the tree does not serve")
                 continue
             wanted.setdefault(target_rel, set()).add(fragment)
+            if fragment:
+                pair = (target_rel, fragment)
+                inherited_refs[pair] = inherited_refs.get(pair, 0) + 1
 
     # Every output the classification promises must be served — the generated
     # index is the one page nothing else references, so "the index links every
@@ -1300,8 +1359,10 @@ def run_gate(*, published: str, artefact_path: str, namespace: 'str | None',
     checked_fragments = 0
     inherited_misses: 'list[tuple[str, str]]' = []
     for rel in sorted(set(wanted) | set(wanted_own)):
-        inherited = {f for f in wanted.get(rel, ()) if f}
         own = wanted_own.get(rel, set())
+        # inherited -= own: a fragment both buckets claim is checked once,
+        # as ours — the overlap must neither double-fail nor inflate D54.
+        inherited = {f for f in wanted.get(rel, ()) if f} - own
         if not inherited and not own:
             continue
         try:
@@ -1320,12 +1381,22 @@ def run_gate(*, published: str, artefact_path: str, namespace: 'str | None',
             checked_fragments += 1
             if fragment not in ids:
                 inherited_misses.append((rel, fragment))
-    if inherited_misses:
-        _log(f"  reported, not failed (D54): {len(inherited_misses)} "
-             f"inherited fragment(s) the rendered tree never anchored — the "
-             f"alarm family's third number (baseline 106, all offset_…)")
-        for rel, fragment in inherited_misses[:5]:
-            _log(f"    {rel}#{fragment}")
+
+    # D54's twin defences (2026-08-24).  Defence one, unconditional: a miss
+    # whose fragment is not the renderer's anchored offset shape fails.
+    tolerable: 'set[tuple[str, str]]' = set()
+    for rel, fragment in inherited_misses:
+        if _OFFSET_FRAGMENT.fullmatch(fragment):
+            tolerable.add((rel, fragment))
+        else:
+            fail(f"{rel} carries no id for inherited fragment {fragment!r}, "
+                 f"which is not the renderer's offset_<a>..<b> shape — D54's "
+                 f"tolerance does not cover it")
+    if tolerable:
+        refs_total = sum(inherited_refs.get(p, 0) for p in tolerable)
+        _log(f"  D54 candidates: {len(tolerable)} distinct fragment(s) over "
+             f"{refs_total} reference(s), all offset-shaped; defence two is "
+             f"the baseline comparison below")
 
     total = len(links)
     positioned = sum(1 for _id, fi, _line in artefact["records"] if fi >= 0)
@@ -1338,6 +1409,7 @@ def run_gate(*, published: str, artefact_path: str, namespace: 'str | None',
              f"({empty} empty)")
     _log(f"reported, not failed: {len(artefact['residue'])} residue file(s)")
     report_path = os.path.join(published, "publish-report.json")
+    report = None
     if os.path.exists(report_path):
         with open(report_path, encoding="utf-8") as f:
             report = json.load(f)
@@ -1360,11 +1432,105 @@ def run_gate(*, published: str, artefact_path: str, namespace: 'str | None',
     if namespace:
         failures += _gate_namespace_sample(links, namespace, region, sample)
 
+    # The three standing counters against their committed baselines (ruled
+    # 2026-08-24): any mismatch FAILS; `--update-counters` is the only path a
+    # baseline moves by, and it refuses while any other failure stands.
+    expected = load_expected_counters(expected_path)
+    observed_d51 = sorted((e["page"], e["target"])
+                          for e in (report or {}).get("stripped", []))
+    if update_counters:
+        if failures:
+            raise SourcePagesError(
+                f"--update-counters refuses while {failures} non-counter gate "
+                f"failure(s) are outstanding — fix those first, then adopt "
+                f"baselines")
+        old_pairs = ({tuple(p) for p in expected[_EXPECTED_D54]}
+                     if expected else set())
+        new = sorted(tolerable - old_pairs)
+        if rendered is not None:
+            _cross_check_new_pairs(new, rendered, cls)
+        for rel, fragment in sorted(old_pairs - tolerable):
+            _log(f"  WARNING: pruning stale baseline pair {rel}#{fragment} — "
+                 f"no longer missing")
+        for rel, fragment in new:
+            _log(f"  adopting {rel}#{fragment} "
+                 f"({inherited_refs.get((rel, fragment), 0)} reference(s))")
+        out_path = expected_counters_path() if expected_path is None \
+            else expected_path
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump({_EXPECTED_D50: external,
+                       _EXPECTED_D51: [[p, t] for p, t in observed_d51],
+                       _EXPECTED_D54: [[r, fr] for r, fr in sorted(tolerable)]},
+                      f, indent=4)
+            f.write("\n")
+        _log(f"baselines written to {out_path}: D50 {external}, D51 "
+             f"{len(observed_d51)} entr(ies), D54 {len(tolerable)} pair(s) — "
+             f"commit the diff as the review")
+    elif expected is None:
+        raise SourcePagesError(
+            f"no baseline file at "
+            f"{expected_counters_path() if expected_path is None else expected_path}"
+            f" — the gate fails closed without the committed alarm baselines "
+            f"(adopt them with gate --update-counters after review)")
+    else:
+        if external != expected[_EXPECTED_D50]:
+            fail(f"D50: {external} site-external exempted, the baseline says "
+                 f"{expected[_EXPECTED_D50]} — review, then --update-counters")
+        if observed_d51 != sorted((p, t) for p, t in expected[_EXPECTED_D51]):
+            fail(f"D51: the stripped entries differ from the baseline's "
+                 f"{len(expected[_EXPECTED_D51])} — review, then "
+                 f"--update-counters")
+        base_pairs = {tuple(p) for p in expected[_EXPECTED_D54]}
+        new = sorted(tolerable - base_pairs)
+        stale = sorted(base_pairs - tolerable)
+        if new:
+            fail(f"D54: {len(new)} inherited miss(es) not in the baseline, "
+                 f"first {new[0][0]}#{new[0][1]} — review, then "
+                 f"--update-counters")
+        if stale:
+            fail(f"D54: {len(stale)} baseline pair(s) no longer missing — "
+                 f"stale, prune via --update-counters")
+        if tolerable and not new:
+            refs_total = sum(inherited_refs.get(p, 0) for p in tolerable)
+            _log(f"  tolerated (D54 twin defences): {len(tolerable)} distinct "
+                 f"fragment(s) over {refs_total} reference(s)")
+
     if failures:
         _log(f"GATE FAILED: {failures} failure(s)")
     else:
         _log("gate passed: zero misses")
     return failures
+
+
+def _cross_check_new_pairs(new: 'list[tuple[str, str]]', rendered: str,
+                           cls: dict) -> None:
+    """`--update-counters --rendered`: each newly tolerated pair must already
+    be missing in the input tree — a fragment some rendered copy DOES anchor
+    was lost by this pipeline, and that is never tolerable."""
+    for rel, fragment in new:
+        if rel.startswith("_aux/"):
+            sym = aux_symbolic(rel[len("_aux/"):])
+            sources = cls["aux_pages"].get(sym, []) if sym else []
+        elif rel.endswith(".html"):
+            sources_map = {f"{name}.html": src
+                           for name, src in cls["theory_pages"].items()}
+            src = sources_map.get(rel)
+            sources = [src] if src else []
+        else:
+            sources = []
+        if not sources:
+            raise SourcePagesError(
+                f"--update-counters cross-check: {rel} has no rendered input "
+                f"counterpart, so a miss there is this pipeline's own — not "
+                f"tolerable")
+        for source in sources:
+            with open(os.path.join(rendered, source), encoding="utf-8") as f:
+                if fragment in _ids_in_tags(f.read()):
+                    raise SourcePagesError(
+                        f"--update-counters cross-check: {source} DOES anchor "
+                        f"{fragment!r}, so the miss on {rel} is this "
+                        f"pipeline's loss, not the renderer's omission — not "
+                        f"tolerable")
 
 
 def _gate_namespace_sample(links: 'dict[str, str]', namespace: str, region: str,
@@ -1579,6 +1745,15 @@ def build_parser(**kw) -> argparse.ArgumentParser:
                            "namespace's source_link values (needs the API key)")
     gate.add_argument("--region", default=None)
     gate.add_argument("--sample", type=int, default=500)
+    gate.add_argument("--update-counters", action="store_true",
+                      help="adopt the observed D50/D51/D54 numbers into the "
+                           "committed baseline file (refused while any "
+                           "non-counter failure is outstanding); the diff is "
+                           "the review")
+    gate.add_argument("--rendered", default=None,
+                      help="with --update-counters: the rendered tree, to "
+                           "confirm each newly tolerated D54 pair is already "
+                           "missing in the input")
 
     patch = sub.add_parser("patch", help="write source_link onto every row of "
                                          "the live namespace (§17.6)")
@@ -1615,7 +1790,9 @@ def run_from_args(args: argparse.Namespace) -> int:
                                  artefact_path=args.artefact,
                                  namespace=args.namespace,
                                  region=args.region or DEFAULT_REGION,
-                                 sample=args.sample) else 0
+                                 sample=args.sample,
+                                 update_counters=args.update_counters,
+                                 rendered=args.rendered) else 0
         elif args.step == "patch":
             run_patch(artefact_path=args.artefact, namespace=args.namespace,
                       region=args.region or DEFAULT_REGION,
