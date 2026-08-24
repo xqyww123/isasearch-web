@@ -424,12 +424,23 @@ isabelle-semantics.qiyuan.me + a /source/* cache-everything edge rule
 (.html is not in Cloudflare's default cache list); chosen over Pages to
 buy out the 25MiB per-file cap (largest page NOW 23.6MiB with marks,
 5.6% headroom) and the 20k-file deployment cap (11,750 files).
-BLOCKED ON USER INPUT: a Cloudflare API token with R2 write +
-qiyuan.me zone edit permissions, and R2 enabled on the account (both
-dashboard actions; secret.sh has only CLOUDFLARE_ACCOUNT_ID and an
-AoA-counter key; wrangler not installed — install on demand).  Then:
-create bucket, upload published/ (5.1GB, content-types), bind the
-domain, add the cache rule, CoreC++ '+' round-trip check, user
-click-through of live source_links.  Then §12.2 step 5, the Worker.
+UPLOAD DONE (2026-08-25): the user created bucket `isasearch` (WNAM,
+S3 endpoint https://532d99283b5aa1e02486ee3fdcb163d5.r2.cloudflarestorage.com)
+and a bucket-scoped Object Read & Write token (secret.sh:
+R2_ISASEARCH_ACCESS_KEY_ID / R2_ISASEARCH_SECRET_ACCESS_KEY).  The whole
+published tree rides at object keys `source/<rel>` — the key equals the
+site URL path minus the leading slash.  rclone (env-config, NO config
+file; MUST set RCLONE_S3_NO_CHECK_BUCKET=true — a bucket-scoped token
+cannot HeadBucket/CreateBucket and the 403 looks like a write denial;
+expect spurious 501 NotImplemented from a checksum quirk, rclone's
+retries absorb them).  VERIFIED: rclone check 11,750/11,750 matching,
+0 differences, 5.043 GiB; 4 spot files byte-identical (largest page and
+smt_word included); content-types correct (text/html; charset=utf-8 /
+text/css / font/ttf).
+STILL TO WIRE (with §12.2 step 5, the Worker): the Worker owns
+isabelle-semantics.qiyuan.me and serves /source/* from an R2 BINDING
+(no extra credentials; needs Workers deploy permission when we get
+there), edge caching for the pages, the CoreC++ '+' round-trip check on
+the final domain, and the user's click-through of live source_links.
 Housekeeping also now includes published.pre-basefix-20260824 (5GB,
 user may order deletion).
