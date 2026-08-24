@@ -370,7 +370,7 @@ def committed_asset_path() -> str:
     JavaScript port read theirs (§16.6).  One file, so the invariant that makes the
     comparison meaningful — the committed asset is the deployed asset — needs no
     second declaration to keep in step."""
-    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "site", "tokenizer", "asset.json")
 
 
