@@ -78,7 +78,7 @@ def _map_body(**kw):
                 "theory_pages": {}, "aux_pages": {}, "css": [], "fonts": [],
                 "dropped": {}, "underived": [], "unclassified": [],
                 "inventory": {}},
-            "tree_fingerprint": "", "theories_sha256": "",
+            "theories_sha256": "",
             "registry_fingerprint": {"entries": 0, "names_sha256": ""}}
     body.update(kw)
     return body
@@ -1220,3 +1220,32 @@ def test_the_namespace_sample_pins_both_endpoints(monkeypatch):
     assert len(seen["chosen"]) == 4
     with pytest.raises(sp.SourcePagesError):
         sp._gate_namespace_sample(links, "ns", "r", sample=1)
+
+
+# --- F-A7's missing tests (2026-08-24) ----------------------------------------
+
+def test_build_relocation_refuses_a_collision_with_a_generated_page():
+    with pytest.raises(sp.SourcePagesError, match="both publish"):
+        sp.build_relocation({"theory_pages": {"index": "S/S1/index.html"},
+                             "aux_pages": {}, "fonts": [], "css": []})
+
+
+def test_build_relocation_refuses_two_claimants_of_one_page():
+    with pytest.raises(sp.SourcePagesError, match="both publish"):
+        sp.build_relocation({"theory_pages": {}, "aux_pages": {},
+                             "fonts": ["a/F.ttf", "b/F.ttf"], "css": []})
+
+
+def test_repo_root_overrides_the_tables_derived_location(tmp_path, monkeypatch):
+    """--repo-root: the source files need not sit two levels above
+    theories.json — the explicit root wins."""
+    repo, rendered, scan_path = _fixture(tmp_path, monkeypatch)
+    moved = tmp_path / "elsewhere" / "theories.json"
+    moved.parent.mkdir()
+    moved.write_bytes((repo / "data" / "theories.json").read_bytes())
+    with pytest.raises(sp.SourcePagesError):
+        sp.run_map(scan_path=scan_path, rendered=str(rendered),
+                   theories_path=str(moved), out=str(tmp_path / "a1.json"))
+    sp.run_map(scan_path=scan_path, rendered=str(rendered),
+               theories_path=str(moved), out=str(tmp_path / "a2.json"),
+               repo_root=str(repo))

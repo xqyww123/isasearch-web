@@ -155,8 +155,7 @@ def load_artefact(path: str, kind: str, fmt: int) -> 'tuple[dict, str]':
 
 
 _MAP_FIELDS = ("files", "records", "file_page_map", "residue", "source_lines",
-               "classification", "tree_fingerprint", "theories_sha256",
-               "registry_fingerprint")
+               "classification", "theories_sha256", "registry_fingerprint")
 
 
 def _validate_map_body(path: str, body: dict) -> None:
@@ -503,15 +502,6 @@ def build_file_page_map(scan: dict, inverted: 'dict[str, str]',
     return file_page_map, residue, no_evidence
 
 
-def tree_fingerprint(inventory: 'dict[str, int]') -> str:
-    """sha256 over `rel\\0size` of the whole sealed inventory, sorted (Q3) —
-    a value derived from the inventory, never a second source of truth."""
-    h = hashlib.sha256()
-    for rel in sorted(inventory):
-        h.update(f"{rel}\0{inventory[rel]}\n".encode("utf-8"))
-    return h.hexdigest()
-
-
 # The two generated files claim their published paths before any relocated
 # file can (the collision guard pre-seeds them).
 GENERATED_PAGES = (f"{SITE_PREFIX}index.html", f"{SITE_PREFIX}isabelle.css")
@@ -619,10 +609,13 @@ def run_map(*, scan_path: str, rendered: str, theories_path: str, out: str,
         "no_evidence": sorted(no_evidence),
         "source_lines": source_lines,
         "classification": classification,
-        "tree_fingerprint": tree_fingerprint(tree.inventory),
         # The identity seals (the review's chain): which table and which
         # registry produced this mapping — §17.3's "the table ships inside
-        # the artefact's content hash", made literal.
+        # the artefact's content hash", made literal.  AUDIT-ONLY values
+        # (F-A9, 2026-08-24): nothing downstream compares them — a check
+        # would break host-genericity — they exist for a human diffing two
+        # artefacts.  (`tree_fingerprint` was dropped for exactly that
+        # reason: an unconsumed duplicate of the sealed inventory.)
         "theories_sha256": hashlib.sha256(theories_bytes).hexdigest(),
         "registry_fingerprint": {
             "entries": len(registry_by_hash),
@@ -834,6 +827,22 @@ def _ids_in_tags(text: str) -> 'set[str]':
             for m in re.finditer(r'\bid="([^"]*)"', tag.group(0))}
 
 
+def assert_reference_completeness(content: str, rel: str) -> None:
+    """F-A8: every `href`/`src` attribute in the file must lie inside a
+    scanned tag — a reference the tag regex misses would be neither rewritten
+    nor gated, silently.  Measured on the real tree with zero false
+    positives: 643,019 = 643,019 over 1,565 files.  (The CSS side needs no
+    twin: its `url()` scan is whole-file by construction.)"""
+    whole = len(_REF_ATTR.findall(content))
+    inside = sum(len(_REF_ATTR.findall(tag.group(0)))
+                 for tag in _TAG.finditer(content))
+    if whole != inside:
+        raise SourcePagesError(
+            f"{rel}: {whole - inside} reference attribute(s) sit outside "
+            f"every scanned tag — the reference scan is incomplete on this "
+            f"file")
+
+
 # The heading elements whose text names the rendered file.  Content is
 # `[^<]*`: an element carrying nested markup does not match, stays
 # uncanonicalised, and any divergence it hides surfaces in the byte compare.
@@ -1004,8 +1013,10 @@ def run_publish(*, rendered: str, artefact_path: str, out: str,
                 aux_choices_path: 'str | None' = None) -> None:
     """The pass (§17.4): one walk driven by the artefact's classification —
     not a fresh tree walk, so publish transforms exactly what the map
-    classified; the sealed inventory refuses a tree that moved since, and
-    each file's size is verified again at the moment it is read.  Everything
+    classified; the sealed inventory refuses a tree that moved since — every
+    file's size is verified in one bulk pass BEFORE any write, so a moved
+    tree stops the pass with nothing staged, which beats discovering it one
+    read at a time halfway through.  Everything
     goes into a fresh staging directory atomically renamed to `out`; the
     pass removes its own staging on failure and never deletes a directory it
     was handed."""
@@ -1055,6 +1066,7 @@ def run_publish(*, rendered: str, artefact_path: str, out: str,
     def _transform(rel: str, content: str, page: str) -> str:
         nonlocal marks
         assert_page_structure(content, rel)
+        assert_reference_completeness(content, rel)
         content = strip_dangling_anchors(content, posixpath.dirname(rel),
                                          relocation, rel, inventory_set,
                                          counters)
@@ -1288,6 +1300,7 @@ def run_gate(*, published: str, artefact_path: str, namespace: 'str | None',
     for rel in sorted(files):
         if rel.endswith(".html"):
             content = _read(rel)
+            assert_reference_completeness(content, rel)
             refs = [m.group(2) for tag in _TAG.finditer(content)
                     for m in _REF_ATTR.finditer(tag.group(0))]
         elif rel.endswith(".css"):
@@ -1357,6 +1370,7 @@ def run_gate(*, published: str, artefact_path: str, namespace: 'str | None',
     # review's third blocker.  A non-empty fragment against a non-markup
     # target is a failure, not a traceback.
     checked_fragments = 0
+    pages_entered = 0
     inherited_misses: 'list[tuple[str, str]]' = []
     for rel in sorted(set(wanted) | set(wanted_own)):
         own = wanted_own.get(rel, set())
@@ -1365,6 +1379,7 @@ def run_gate(*, published: str, artefact_path: str, namespace: 'str | None',
         inherited = {f for f in wanted.get(rel, ()) if f} - own
         if not inherited and not own:
             continue
+        pages_entered += 1
         try:
             ids = _ids_in_tags(_read(rel))
         except UnicodeDecodeError:
@@ -1402,7 +1417,7 @@ def run_gate(*, published: str, artefact_path: str, namespace: 'str | None',
     positioned = sum(1 for _id, fi, _line in artefact["records"] if fi >= 0)
     _log(f"checked {checked_refs} reference(s); {external} site-external "
          f"exempted (D50); {checked_fragments} fragment(s) verified on "
-         f"{sum(1 for r in wanted.values() if any(r))} page(s)")
+         f"{pages_entered} page(s)")
     if total:
         _log(f"coverage: positioned {positioned / total:.2%}, linked "
              f"{(total - empty) / total:.2%} of {total} row link(s) "

@@ -354,3 +354,30 @@ def test_a_group_checkpoints_on_its_last_batch_and_not_on_any_earlier_one():
     batches = list(se._batches(((bytes([i]), _doc(i)) for i in range(9)), 1, 1 << 30))
     groups = list(se._groups(batches, 4))
     assert [g[-1][1] for g in groups] == [bytes([3]), bytes([7]), bytes([8])]
+
+
+# --- F-A7's missing tests (2026-08-24) ----------------------------------------
+
+def test_the_export_refuses_the_contradictory_source_link_flags():
+    with pytest.raises(se.ExportError, match="contradict"):
+        se.run(isabelle_home="", afp_dir="", committed_asset="",
+               vector_store=None, region="", dump=None, checkpoint="",
+               limit=None, change_intended=False, skip_gate=True,
+               source_links_path="x.json", no_source_links=True)
+
+
+def test_the_artefact_is_resolved_before_any_network_action(tmp_path,
+                                                            monkeypatch):
+    """A3/B5: a missing artefact is an argument error and must not cost a
+    billed write — no key is read and no request leaves before the load."""
+    def _bomb(*_a, **_k):
+        raise AssertionError("network/key touched before the artefact")
+    monkeypatch.setattr(se, "request", _bomb)
+    monkeypatch.setattr(se, "api_key", _bomb)
+    import site_source_pages as ssp
+    with pytest.raises((ssp.SourcePagesError, OSError)):
+        se.run(isabelle_home="", afp_dir="", committed_asset="",
+               vector_store=None, region="", dump=None, checkpoint="",
+               limit=None, change_intended=False, skip_gate=True,
+               source_links_path=str(tmp_path / "missing.json"),
+               no_source_links=False)
