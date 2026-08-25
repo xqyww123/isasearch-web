@@ -2,16 +2,27 @@
 <div class="about">
   <h1>About Isasearch</h1>
 
+  <!-- Every machine-derived value the site knows about itself, in one place.
+       All five are slots: the first four come from the asset sentinel and the
+       namespace name, the model from the deployed var the Worker calls. -->
+  <table class="facts">
+    <tr><th>Isabelle release</th><td>{{release}}</td></tr>
+    <tr><th>AFP snapshot</th><td>{{snapshot}}</td></tr>
+    <tr><th>Entities</th><td>{{entities}}</td></tr>
+    <tr><th>Index built</th><td>{{built}}</td></tr>
+    <tr><th>Embedding model</th><td>{{model}}</td></tr>
+  </table>
+
   <div class="section">
     <span class="section-label">What is indexed</span>
-    <p>Isasearch covers the Isabelle release {{release}} and the Archive of Formal Proofs snapshot of {{snapshot}}, and nothing outside them. The index covers theorems, together with the rules that Isabelle derives from <code>datatype</code>, <code>inductive</code> and <code>function</code> definitions. It also covers constants, types, classes, locales, proof methods and named theorems. In total it holds {{entities}} entities. The index was built on {{built}}.</p>
+    <p>Isasearch covers the Isabelle release {{release}} and the Archive of Formal Proofs snapshot of {{snapshot}}, and nothing outside them. It covers theorems, constants, types, classes, locales, proof methods and named theorems. In total it holds {{entities}} entities. It was built on {{built}}.</p>
     <p>An entity has one of 11 kinds: Theorem, Named theorems, Constant, Type, Class, Locale, Proof method, Introduction rule, Elimination rule, Induction rule and Case split. <strong>Named theorems</strong> is a <code>named_theorems</code> declaration, such as <code>approximation_preproc</code>. <strong>Case split</strong> is a case rule: one case for each constructor of a datatype, or for each introduction rule of an inductive definition. A rule whose name ends in <code>.split</code>, such as <code>option.split</code>, has the kind Theorem here.</p>
   </div>
 
   <div class="section">
     <span class="section-label">How a search works</span>
-    <p>A query is required. It puts the results in order, and only the first 200 appear. The filters are optional: they decide which entities are eligible to be ordered at all. The filters do not affect the order.</p>
-    <p>With the BM25 checkbox selected, the semantic-similarity results (from the embedding model) and the BM25 word-matching results are combined with reciprocal rank fusion (RRF). Cleared, only semantic similarity is used. Isasearch ranks every entity that satisfies your conditions and returns the best 200.</p>
+    <p>A query is required. Isasearch compares it with an English explanation of every entity, using the embedding model <code>{{model}}</code>, and puts the results in that order. Only the best 200 appear.</p>
+    <p>The syntactic filters are optional. They decide which entities are eligible to be ordered at all; they do not change the order.</p>
   </div>
 
   <div class="section">

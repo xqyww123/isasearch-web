@@ -918,11 +918,17 @@ reader of those sections needs to find the decision that used to govern them.
   rebuilt on `?n + ?m = ?m + ?n`, measured 0, paired with `?a + ?b = ?b + ?a`,
   measured 15, so that the reason for the miss is visible. `site/COPY.md` §5.1 carries
   the result and is authoritative; nothing is outstanding here.
-- **D36** (2026-08-14) — **hybrid retrieval is one `multi_query`, RRF-fused by
-  turbopuffer, with the filter tree attached to both legs**, 200 rows per leg
-  truncated to 200 after fusion, RRF constant 60 (§6.6). Attaching the filter to
-  both legs is a correctness requirement: otherwise BM25-side documents bypass
-  every syntactic condition, including D22's "appears in none of the three".
+- **D36** (2026-08-14, **superseded 2026-08-25**) — retrieval was hybrid: one
+  `multi_query` with a vector leg and a BM25 leg over `interpretation`, RRF-fused
+  by turbopuffer with constant 60, the filter tree on both legs (§6.6).
+  **The BM25 leg and the fusion are removed.** The user tried the hybrid results
+  on the built site and judged them clearly worse than semantic similarity alone,
+  so every search is now the vector leg alone, 200 rows, filter tree attached.
+  The BM25 checkbox that let a visitor choose (D36 as amended 2026-08-24) is
+  deleted from the interface with it, and the request body no longer accepts a
+  `bm25` field. What survives of D36 is the correctness requirement it was
+  written for: the filter tree rides the leg, so nothing bypasses a syntactic
+  condition.
 - **D35** (2026-08-14) — **rate limiting is two built layers plus one
   specified-but-unbuilt**, detailed in §11.1: a free Cloudflare edge rule at 5
   requests per IP per 10 seconds, a Workers KV counter at 1,000 per IP per UTC
@@ -1038,6 +1044,10 @@ reader of those sections needs to find the decision that used to govern them.
     cleared-every-kind blocking state and its message are deleted with this —
     that state no longer exists. D38's OR reading applies to a non-empty
     selection; an empty selection sends no kind condition at all.
+
+    **Amended again 2026-08-25 (user-ruled): the kind selection filters and
+    nothing else.** It used to enter the embedding instruction, and so changed
+    the ranking as well as the eligible set; §6.3b records the removal and why.
   - **A search fetches 200 results in one request** and pages in the browser at
     20 a screen; turning a page issues no new request. **200 is the end of the
     result list — there is no "load more" and no second request.** This follows
@@ -2336,6 +2346,39 @@ Quote the whole-corpus column when sizing the production namespace, since that i
 gets built. `theory_subtokens` is counted over the records that carry constituent
 theories, separator tokens included.
 
+### 6.3b The query instruction (fixed 2026-08-25)
+
+The text sent to the embedding model is not the query alone. It is wrapped in
+the instruction the DB library uses for its own retrieval, so that the query
+side and the document side agree:
+
+```
+Instruct: Given a natural-language description, retrieve the most relevant Isabelle/HOL constructs
+Query: <the normalised query>
+```
+
+**The instruction is a constant.** Until 2026-08-25 the last word was a noun
+phrase built from the visitor's kind selection — `theorems` for Theorem,
+`constants` for Constant, one shared `inference rules` for the four rule kinds,
+`constructs` for an empty selection — which meant that selecting a kind changed
+the query vector and therefore the **order** of the results, not only which
+entities were eligible. The user ruled that out: **a filter must filter and
+nothing else.** The phrase machinery is deleted from `worker/src/kinds.js`; a
+unit test pins the input text and asserts that a kind argument cannot change it.
+
+Two consequences, both wanted. The interface can now say without qualification
+that the Syntactic Filters decide which entities are eligible and never the
+order — before this, that sentence was false of the Kind panel, and the copy
+that tried to state it was the copy the user could not parse. And one query
+text now has exactly one vector whatever the selection, so §11.1's embedding
+cache stops splitting on kinds.
+
+What did *not* change: the eleven stored kind values, their canonical order,
+the `["kind","In",[…]]` filter, and the rule that an empty selection sends no
+kind condition at all (D29 as amended). Ranking under the new instruction
+differs from ranking under the old one for any search that selected a kind, so
+a deployment of this change re-orders those results.
+
 ### 6.4 Region
 
 **North America (D18)**, co-located with the Fireworks origin (§3.5) so that
@@ -2388,7 +2431,12 @@ named the required query as the single thing that would send them back to
 `find_theorems`, and their need is fully served by the design as it stands.
 This is a copy defect, not a case for reopening D7.
 
-### 6.6 How the two legs are fused (D36)
+### 6.6 How the two legs are fused (D36 — superseded 2026-08-25)
+
+**This section describes retrieval as it was until 2026-08-25.** D36 as amended
+that day removes the BM25 leg and the fusion: a search is the vector leg alone.
+The paragraphs below are kept because the filter-tree requirement they state
+still governs, and because the measurements are the record of what was tried.
 
 D29 locks hybrid retrieval with reciprocal rank fusion; this is the mechanism.
 
@@ -3179,13 +3227,12 @@ it removes more Fireworks calls than any rate limit and cuts latency on a hit.
 **"Normalised" defined, 2026-08-25 (user-ruled):** NFC, then trimmed, then every
 inner run of whitespace folded to one space — and nothing more; case folding or
 punctuation stripping would change retrieval. The Worker applies it once, and
-the embedding input, the BM25 leg and the cache key all see that one string.
-The key is in fact the SHA-256 of the whole instruction-wrapped text (§6.3's
-query template with the `{kinds}` phrase filled in), which is stricter than
-"the query string": the phrase changes the vector, so a different kind
-selection must embed separately. The kind selection is itself canonicalised
-first (deduplicated, fixed order, all eleven ≡ none), so click order cannot
-split the cache or the ranking.
+the embedding input and the cache key both see that one string. The key is the
+SHA-256 of the whole instruction-wrapped text (§6.3b's template), which since
+2026-08-25 varies only with the query: **the instruction is fixed**, so one
+query text has one vector however the kinds are selected, and the cache is hit
+far more often than when the phrase varied. The kind selection is still
+canonicalised (deduplicated, fixed order, all eleven ≡ none) for the filter.
 **Cloudflare Turnstile** stays in reserve if the two built layers prove
 insufficient.
 

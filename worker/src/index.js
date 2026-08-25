@@ -143,14 +143,14 @@ async function search(request, env, ctx) {
     }
     throw e;
   }
-  const { query, bm25, kinds, filters, theoryParts, parts } = compiled;
+  const { query, kinds, filters, theoryParts, parts } = compiled;
 
   let rows;
   try {
     await assertAssetMatches(env);
-    const vector = await embedQuery(embeddingInput(query, kinds), env, ctx);
+    const vector = await embedQuery(embeddingInput(query), env, ctx);
     rows = rowsOf(await tupfQuery(
-      tupfQueryBody({ vector: Array.from(vector), query, filters, bm25 }), env));
+      tupfQueryBody({ vector: Array.from(vector), filters }), env));
   } catch (e) {
     console.log(JSON.stringify({ event: 'upstream_error', message: String(e) }));
     return json(502, { error: { code: 'upstream' } });
@@ -161,7 +161,7 @@ async function search(request, env, ctx) {
 
   return json(200, {
     results: cards,
-    // §4.5's end-of-list copy branches on whether the fused cap was reached.
+    // §4.5's end-of-list copy branches on whether the 200-row cap was reached.
     limit_reached: rows.length >= RESULT_LIMIT,
     parts,
   });
@@ -197,12 +197,17 @@ const tupfQuery = (body, env) => tupfPost(env.TPUF_NAMESPACE, body, env);
 let assetCheck = null;
 
 /** What every page prints: the sentinel row's entity count and build date,
- * and the release and snapshot the namespace name carries (§8.2's shape,
- * `isasearch-<release>-<snapshot>`). */
+ * the release and snapshot the namespace name carries (§8.2's shape,
+ * `isasearch-<release>-<snapshot>`), and the embedding model — read from the
+ * deployed var, never written into a page, so the about page cannot claim a
+ * model the Worker does not call. */
 async function siteOf(env) {
   const { entities, built } = await assertAssetMatches(env);
   const m = /^isasearch-(.+)-afp-(\d{4}-\d{2}-\d{2})/.exec(env.TPUF_NAMESPACE) ?? [];
-  return { entities, built, release: m[1] ?? '', snapshot: m[2] ?? '' };
+  return {
+    entities, built, release: m[1] ?? '', snapshot: m[2] ?? '',
+    model: env.FIREWORKS_MODEL ?? '',
+  };
 }
 
 async function sha256hex(text) {

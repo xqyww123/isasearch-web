@@ -24,7 +24,11 @@ code { font-size: 0.95em; }
 .header { display: flex; align-items: center; gap: 20px; padding: 0 28px; height: 46px; border-bottom: 1px solid #e5e3de; }
 .brand { font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: #1b1b19; border: 0; }
 .brand:hover { color: #1b1b19; }
-.header-meta { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8a877f; }
+/* One line, never wrapped: it used to break into a narrow column and run over
+   the page below.  It shrinks, then clips, then goes away — the about page
+   carries the same four values in full. */
+.header-meta { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8a877f; }
+@media (max-width: 900px) { .header-meta { display: none; } }
 .header-links { margin-left: auto; display: flex; align-items: center; gap: 18px; font-size: 12px; }
 .header-links a { color: #5f5d57; border-bottom-color: rgba(0,0,0,0.15); }
 .header-search { flex: 1; display: flex; border: 1px solid #d9d6cf; background: #ffffff; height: 30px; }
@@ -32,9 +36,9 @@ code { font-size: 0.95em; }
 .header-search button { border: 0; background: #1b1b19; color: #faf9f7; padding: 0 18px; font-size: 12.5px; cursor: pointer; }
 
 /* landing */
-.landing { padding: 74px 0 0; display: flex; flex-direction: column; align-items: center; }
+.landing { padding: 74px 0 40px; display: flex; flex-direction: column; align-items: center; }
 .landing-col { width: 840px; max-width: calc(100vw - 56px); display: flex; flex-direction: column; gap: 14px; }
-.landing h1 { margin: 0; font-size: 30px; font-weight: 600; letter-spacing: -0.02em; }
+.landing h1 { margin: 0 0 15px; font-size: 30px; font-weight: 600; letter-spacing: -0.02em; }
 .intro { font-size: 14px; line-height: 1.6; color: #5f5d57; text-align: justify; margin-bottom: 12px; }
 .search-box { display: flex; border: 1px solid #b3afa6; background: #ffffff; }
 .search-box input { flex: 1; border: 0; outline: none; padding: 18px 20px; font-size: 19px; background: transparent; }
@@ -53,7 +57,7 @@ code { font-size: 0.95em; }
 .filters-bar .summary:empty { display: none; }
 .filters[data-open="false"] .filters-bar { border-bottom: 0; }
 .filters-body { display: grid; grid-template-columns: 108px 1fr; gap: 14px 18px; padding: 14px 16px 16px; align-items: start; }
-.panel-heading { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: #5f5d57; padding-top: 7px; cursor: help; }
+.panel-heading { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: #5f5d57; padding-top: 7px; }
 .conditions { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .condition { display: flex; align-items: stretch; gap: 6px; }
 .polarity { width: 104px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 7px; border-bottom-width: 2px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; cursor: pointer; }
@@ -68,7 +72,6 @@ code { font-size: 0.95em; }
 .remove:hover { border-color: #8a877f; color: #1b1b19; }
 .add-condition { background: transparent; border: 1px dashed #cfcbc2; padding: 4px 10px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5f5d57; cursor: pointer; }
 .add-condition:hover { border-color: #8a877f; color: #1b1b19; }
-.panel-note { max-width: 600px; margin-top: -4px; font-size: 11.5px; line-height: 1.5; color: #8a877f; }
 .theory-caveat { max-width: 600px; margin-top: -4px; padding: 6px 10px; background: oklch(0.97 0.035 85); border: 1px solid oklch(0.86 0.07 85); border-left-width: 3px; font-size: 11.5px; line-height: 1.5; color: oklch(0.42 0.09 70); text-wrap: pretty; }
 .theory-caveat p { margin: 0; }
 .theory-caveat p + p { margin-top: 6px; }
@@ -77,23 +80,20 @@ code { font-size: 0.95em; }
 .kind-button:hover { border-color: #8a877f; color: #1b1b19; }
 .kind-button[aria-pressed="true"] { background: #1b1b19; border-color: #1b1b19; color: #faf9f7; }
 .kind-dot { width: 6px; height: 6px; display: inline-block; }
-.ranking { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; }
-.ranking input { margin: 2px 0 0; width: 14px; height: 14px; flex: none; accent-color: #1b1b19; cursor: pointer; }
-.ranking span { font-size: 12px; color: #75736c; line-height: 1.65; }
-.filters-foot { padding: 0 14px 13px; font-size: 12px; color: #75736c; line-height: 1.65; text-align: justify; display: flex; flex-direction: column; gap: 8px; }
+.filters-foot { padding: 4px 14px 13px; font-size: 12px; color: #75736c; line-height: 1.65; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .filters-foot p { margin: 0; }
 .filters-foot strong { font-weight: 600; color: #5f5d57; }
-.filters-actions { display: flex; align-items: center; gap: 14px; padding-top: 2px; }
-.clear-all { background: transparent; border: 1px solid #d9d6cf; padding: 6px 12px; font-size: 12.5px; color: #5f5d57; cursor: pointer; }
+
+.clear-all { flex: none; background: transparent; border: 1px solid #d9d6cf; padding: 6px 12px; font-size: 12.5px; color: #5f5d57; cursor: pointer; }
 .clear-all:hover { border-color: #8a877f; color: #1b1b19; }
 
 /* results */
 .status-line { display: flex; align-items: baseline; justify-content: space-between; padding: 16px 28px 8px; font-size: 12.5px; color: #75736c; }
 .list { border-top: 1px solid #e5e3de; }
-.card { display: grid; grid-template-columns: 1fr 200px; gap: 20px; padding: 13px 28px 14px; border-bottom: 1px solid #e9e7e2; }
+.card { padding: 13px 28px 14px; border-bottom: 1px solid #e9e7e2; }
 .card:hover { background: #ffffff; }
 .card-main { min-width: 0; display: flex; flex-direction: column; gap: 7px; }
-.card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
 .card-name { font-family: 'PhiSymbols', monospace; font-size: 14.5px; font-weight: 500; color: #1b1b19; border-bottom: 1px solid #cfcbc2; letter-spacing: -0.005em; overflow-wrap: anywhere; }
 .card-kinds { display: flex; flex-wrap: wrap; gap: 10px; }
 .kind { display: inline-flex; align-items: center; gap: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #5f5d57; }
@@ -101,6 +101,11 @@ code { font-size: 0.95em; }
 .theory-line { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; color: #75736c; }
 .theory-lead { color: #8a877f; font-family: 'IBM Plex Sans', system-ui, sans-serif; }
 .expr-wrap { position: relative; }
+/* Same row as the name, pushed to the far right, sitting on its baseline. */
+.card-source { margin-left: auto; text-align: right; font-size: 11.5px; overflow-wrap: anywhere; }
+/* Fixed width so the numbers line up down the page. */
+.card-score { flex: none; width: 5ch; text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #8a877f; }
+.card-source a { border-bottom-color: rgba(0,0,0,0.15); }
 .expr { margin: 0; padding: 9px 11px; background: #f4f2ee; border: 1px solid #e9e7e2; border-left: 2px solid #cfcbc2; font-family: 'PhiSymbols', monospace; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; max-height: 420px; overflow: auto; }
 .expr-wrap[data-clipped="true"] .expr { max-height: 96px; overflow: hidden; }
 .expr-wrap[data-clipped="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 46px; background: linear-gradient(to bottom, rgba(244,242,238,0), #f4f2ee 78%); pointer-events: none; }
@@ -112,13 +117,15 @@ code { font-size: 0.95em; }
 .expl-text { font-size: 13px; line-height: 1.6; color: #45443f; text-wrap: pretty; }
 .expl-none { color: #75736c; }
 .expl-disclosure { font-size: 11.5px; line-height: 1.55; color: #8a877f; text-wrap: pretty; }
-.card-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .source-absent { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #8a877f; cursor: help; }
-.card-side a { font-size: 11.5px; text-align: right; overflow-wrap: anywhere; }
 .pager { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 18px 28px 8px; }
 .pager button { background: transparent; border: 1px solid #d9d6cf; padding: 5px 14px; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #5f5d57; cursor: pointer; }
 .pager button:hover { border-color: #8a877f; }
 .pager .dot { color: #cfcbc2; }
+.pager button, .pager-gap { flex: 0 0 auto; min-width: 104px; }
+.pager-gap { visibility: hidden; }
+.pager-where { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 150px; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #5f5d57; }
+.pager-page { color: #8a877f; font-size: 10.5px; }
 .list-end { padding: 8px 28px 26px; text-align: center; font-size: 12.5px; color: #75736c; line-height: 1.6; }
 
 /* empty states (mockup 04) */
@@ -156,10 +163,19 @@ code { font-size: 0.95em; }
 
 /* messages (§6, §7) */
 .message { padding: 44px 28px; text-align: center; font-size: 14px; line-height: 1.65; color: #3d3b36; }
+/* On the landing page the message answers the search box right above it: tight
+   and left-aligned, not the results area's standalone centred block. */
+#message-home .message { padding: 0; text-align: left; font-size: 13px; }
 
 /* entity page (mockup 05) */
 .entity { display: grid; grid-template-columns: 1fr 372px; gap: 0; align-items: start; }
 .entity-main { padding: 30px 34px 60px; display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+/* Every prose block runs the full width of the column, the same width as the
+   statement box above it, with both edges flush: three different max-widths
+   made the page look ragged, and a shorter measure still did. */
+.entity-main .expl-text, .entity-main .expl-disclosure, .entity-main .section-note {
+  max-width: none; text-align: justify; }
+.entity-main .expl { max-width: none; }
 .entity h1 { margin: 0; font-family: 'PhiSymbols', monospace; font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.25; overflow-wrap: anywhere; }
 .entity-head { display: flex; flex-direction: column; gap: 10px; }
 .entity-kinds { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
@@ -167,9 +183,9 @@ code { font-size: 0.95em; }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
 .section-label { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: #8a877f; }
 .entity .expr { padding: 16px 18px; border: 1px solid #e5e3de; font-size: 15px; line-height: 1.62; max-height: 560px; }
-.entity .expl-text { font-size: 15px; line-height: 1.68; color: #33322e; max-width: 74ch; }
-.entity .expl-disclosure { font-size: 12px; max-width: 82ch; }
-.section-note { font-size: 12px; line-height: 1.6; color: #75736c; max-width: 76ch; text-wrap: pretty; }
+.entity .expl-text { font-size: 15px; line-height: 1.68; color: #33322e; }
+.entity .expl-disclosure { font-size: 12px; }
+.section-note { font-size: 12px; line-height: 1.6; color: #75736c; }
 .theory-chips { display: flex; flex-wrap: wrap; gap: 6px 8px; }
 .theory-chip { font-family: 'PhiSymbols', monospace; font-size: 12px; border: 1px solid #e0ddd6; background: #ffffff; padding: 3px 9px; color: #45443f; }
 .source-box { border: 1px solid #e5e3de; background: #ffffff; padding: 12px 14px; font-size: 13px; color: #45443f; line-height: 1.6; }
@@ -182,12 +198,19 @@ code { font-size: 0.95em; }
 
 /* about page (mockup 06) */
 .about { padding: 30px 34px 60px; display: flex; flex-direction: column; gap: 24px; max-width: 900px; }
+/* The facts table: what the site knows about itself, none of it hand-written. */
+.facts { border-collapse: collapse; font-size: 12.5px; }
+.facts th, .facts td { text-align: left; padding: 4px 0; vertical-align: baseline; border-bottom: 1px solid #eceae5; }
+.facts th { font-weight: 400; color: #75736c; padding-right: 28px; white-space: nowrap; }
+.facts td { font-family: 'IBM Plex Mono', monospace; color: #33322e; }
 .about h1 { margin: 0; font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.25; }
 .about p { margin: 0; font-size: 14px; line-height: 1.65; color: #33322e; text-wrap: pretty; }
 .about strong { font-weight: 500; }
 
 /* footer (§9) */
-.footer { margin: 60px 28px 0; padding: 14px 0 40px; border-top: 1px solid #e5e3de; display: flex; justify-content: space-between; gap: 24px; font-size: 11.5px; color: #8a877f; line-height: 1.6; }
-.footer .built { font-family: 'IBM Plex Mono', monospace; flex: none; }
-.footer .note { max-width: 620px; text-wrap: pretty; }
+/* Wraps rather than crushing: the build line will not shrink, so without
+   wrapping it squeezed the note into a one-word column. */
+.footer { margin: 80px 28px 0; padding: 14px 0 40px; border-top: 1px solid #e5e3de; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 24px; font-size: 11.5px; color: #8a877f; line-height: 1.6; }
+.footer .built { font-family: 'IBM Plex Mono', monospace; flex: 0 1 auto; overflow-wrap: anywhere; }
+.footer .note { flex: 1 1 340px; max-width: 620px; text-wrap: pretty; }
 .footer .note strong { font-weight: 500; color: #5f5d57; }

@@ -7,10 +7,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { Tokenizer } from '../../site/tokenizer/isabelle_tokenizer.js';
-import { KINDS, canonicalKinds, kindsPhrase, embeddingInput,
-         DEFAULT_KINDS_PHRASE } from '../src/kinds.js';
+import { KINDS, canonicalKinds, embeddingInput } from '../src/kinds.js';
 import { compileRequest, normalizeQuery, tupfQueryBody, rowsOf, collapse, entityOf,
-         matchedTheories, SearchError, RESULT_LIMIT, RRF_CONSTANT } from '../src/search.js';
+         matchedTheories, SearchError, RESULT_LIMIT } from '../src/search.js';
 
 const asset = JSON.parse(readFileSync(
   fileURLToPath(new URL('../../site/tokenizer/asset.json', import.meta.url)), 'utf8'));
@@ -23,8 +22,6 @@ test('the eleven stored kind values, exactly (§16.8 census)', () => {
     'case-split rule', 'constant', 'elimination rule', 'induction rule',
     'introduction rule', 'lemma', 'locale', 'named theorem bundles',
     'proof method', 'type', 'typeclass'].sort());
-  // Every kind has a phrase: a lone selection never falls back to the default.
-  for (const k of KINDS) assert.notEqual(kindsPhrase([k]), DEFAULT_KINDS_PHRASE);
 });
 
 test('canonical kinds: order-free, deduplicated, all-eleven is empty', () => {
@@ -34,28 +31,15 @@ test('canonical kinds: order-free, deduplicated, all-eleven is empty', () => {
   assert.deepEqual(canonicalKinds([]), []);
 });
 
-test('kinds phrase: empty, single, join, rule collapse', () => {
-  assert.equal(kindsPhrase([]), DEFAULT_KINDS_PHRASE);
-  assert.equal(kindsPhrase(['constant']), 'constants');
-  assert.equal(kindsPhrase(['lemma', 'constant']), 'theorems and constants');
-  assert.equal(kindsPhrase(['lemma', 'constant', 'type']),
-               'theorems, constants and types');
-  // The four rule kinds collapse to ONE "inference rules".
-  assert.equal(kindsPhrase(['introduction rule', 'elimination rule']),
-               'inference rules');
-  assert.equal(kindsPhrase(['lemma', 'induction rule', 'case-split rule']),
-               'theorems and inference rules');
-});
-
-test('embedding input reproduces the library template', () => {
-  assert.equal(
-    embeddingInput('sorted lists', []),
+test('the embedding input is fixed: the kind selection never reaches it', () => {
+  const expected = (q) =>
     'Instruct: Given a natural-language description, retrieve the most relevant '
-    + 'Isabelle/HOL constructs\nQuery: sorted lists');
-  assert.equal(
-    embeddingInput('q', ['lemma']),
-    'Instruct: Given a natural-language description, retrieve the most relevant '
-    + 'Isabelle/HOL theorems\nQuery: q');
+    + `Isabelle/HOL constructs\nQuery: ${q}`;
+  assert.equal(embeddingInput('sorted lists'), expected('sorted lists'));
+  // Ruled 2026-08-25: selecting kinds filters and nothing else, so a second
+  // argument — however it is passed — cannot change the text or the vector.
+  assert.equal(embeddingInput('q', ['lemma']), expected('q'));
+  assert.equal(embeddingInput('q', []), expected('q'));
 });
 
 // ---- normalisation and compileRequest -------------------------------------
@@ -83,12 +67,9 @@ test('D7: the query is required', () => {
   failsWith({ query: '   ' }, 'query_missing');
 });
 
-test('the compiled query is the normalised one, and the same string feeds both legs', () => {
-  const { query, bm25 } = compile({ query: '  sorted   lists ' });
+test('the compiled query is the normalised one', () => {
+  const { query } = compile({ query: '  sorted   lists ' });
   assert.equal(query, 'sorted lists');
-  assert.equal(bm25, true);
-  const body = tupfQueryBody({ vector: [0], query, filters: null, bm25 });
-  assert.deepEqual(body.queries[1].rank_by, ['interpretation', 'BM25', 'sorted lists']);
 });
 
 test('D29 caps: 8000-code-point query, 512-code-point condition', () => {
@@ -96,11 +77,6 @@ test('D29 caps: 8000-code-point query, 512-code-point condition', () => {
   failsWith({ query: 'q'.repeat(8001) }, 'query_too_long');
   const long = { on: 'expr', polarity: 'contains', text: 'a'.repeat(513) };
   failsWith({ query: 'q', conditions: [long] }, 'condition_too_long');
-});
-
-test('bm25 must be a boolean when present', () => {
-  assert.equal(compile({ query: 'q', bm25: false }).bm25, false);
-  for (const bad of ['false', 0, null]) failsWith({ query: 'q', bm25: bad }, 'bad_request');
 });
 
 test('a separators-only condition is rejected, with its index', () => {
@@ -184,28 +160,18 @@ test('the tokenizer resolves ASCII escapes in a condition', () => {
 
 // ---- tupfQueryBody / rowsOf -------------------------------------------------
 
-test('two retrieval states, one request shape: hybrid RRF vs the vector leg alone', () => {
+test('the request body: the vector leg alone, filters on it, no fusion', () => {
   const vector = [0.1, 0.2];
   const filters = ['kind', 'In', ['lemma']];
 
-  const hybrid = tupfQueryBody({ vector, query: 'sorted', filters, bm25: true });
-  assert.deepEqual(hybrid.rerank_by, ['RRF', { rank_constant: RRF_CONSTANT }]);
-  assert.equal(hybrid.limit, RESULT_LIMIT);
-  assert.equal(hybrid.queries.length, 2);
-  assert.deepEqual(hybrid.queries[0].rank_by, ['vector', 'ANN', vector]);
-  assert.deepEqual(hybrid.queries[1].rank_by, ['interpretation', 'BM25', 'sorted']);
-  // §6.6: the filter tree is attached to BOTH legs.
-  assert.deepEqual(hybrid.queries[0].filters, filters);
-  assert.deepEqual(hybrid.queries[1].filters, filters);
-  assert.equal(hybrid.queries[0].top_k, RESULT_LIMIT);
-
-  const single = tupfQueryBody({ vector, query: 'sorted', filters, bm25: false });
+  const single = tupfQueryBody({ vector, filters });
   assert.equal(single.queries.length, 1);
   assert.deepEqual(single.queries[0].rank_by, ['vector', 'ANN', vector]);
   assert.deepEqual(single.queries[0].filters, filters);
+  assert.equal(single.queries[0].top_k, RESULT_LIMIT);
   assert.ok(!('rerank_by' in single));
 
-  const unfiltered = tupfQueryBody({ vector, query: 'q', filters: null, bm25: false });
+  const unfiltered = tupfQueryBody({ vector, filters: null });
   assert.ok(!('filters' in unfiltered.queries[0]));
 });
 
@@ -244,7 +210,7 @@ test('golden standard: theorem-alike keys equal but for the tag byte are one ent
   assert.notEqual(entityOf(KEY_CONST), entityOf(KEY_LOCALE));      // name-addressed never merge
 });
 
-test('D5: rows of one entity become one card, kinds unioned, rank kept; D48: no score', () => {
+test('D5: rows of one entity become one card, kinds unioned, rank kept', () => {
   const cards = collapse([
     row({ id: 'ua', key: KEY_THM, kind: 'lemma', interpretation: 'best' }),
     row({ id: 'ub', key: KEY_CONST, kind: 'constant' }),
@@ -260,8 +226,24 @@ test('D5: rows of one entity become one card, kinds unioned, rank kept; D48: no 
   for (const card of cards) {
     assert.deepEqual(Object.keys(card).sort(), [
       'expr', 'from_collection', 'id', 'interpretation', 'key', 'kinds',
-      'name', 'position', 'source_link', 'theories']);
+      'name', 'position', 'similarity', 'source_link', 'theories']);
   }
+});
+
+// The card carries the cosine similarity (ruled 2026-08-25, reversing D48's "no
+// relevance number": with the BM25 leg gone the ranking IS this number).  The
+// namespace's metric is cosine_distance, so the card's value is 1 - $dist, and a
+// row without one carries null rather than a wrong number.
+test('the card carries the cosine similarity, and null when the row has none', () => {
+  const [near, far, none] = collapse([
+    { key: KEY_THM, kind: 'lemma', $dist: 0.115 },
+    { key: KEY_CONST, kind: 'constant', $dist: 0.265 },
+    { key: KEY_LOCALE, kind: 'locale' },
+  ]);
+  assert.ok(Math.abs(near.similarity - 0.885) < 1e-9);
+  assert.ok(Math.abs(far.similarity - 0.735) < 1e-9);
+  assert.ok(near.similarity > far.similarity);   // rank order is similarity order
+  assert.equal(none.similarity, null);
 });
 
 test('collapse: an attribute the row lacks is the empty value, never a missing key', () => {

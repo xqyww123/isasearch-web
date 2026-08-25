@@ -12,12 +12,8 @@ export const CONDITION_CAP = 512;
 // Not a ruled number: a bound on request size only, far above any real use.
 export const MAX_CONDITIONS = 64;
 
-// Fetch depth and fused cap (D29/D36): each leg 200, fused list truncated to
-// 200, no second request.
+// Fetch depth (D29): the top 200 of the vector leg, no second request.
 export const RESULT_LIMIT = 200;
-// §6.6's ruled RRF constant.  Stated in the request rather than inherited from
-// the service default, which can move with no error and (D48) no symptom.
-export const RRF_CONSTANT = 60;
 
 const FIELD_OF = {
   name: 'name_subtokens',
@@ -46,14 +42,14 @@ const codePoints = (s) => Array.from(s).length;
 /** §11.1's "normalised query string", defined here and nowhere else: NFC,
  * trimmed, inner whitespace runs folded to one space.  Nothing more — case
  * folding or punctuation stripping would change retrieval.  The embedding
- * input, the BM25 leg and the cache key all see this one string. */
+ * input and the cache key both see this one string. */
 export function normalizeQuery(s) {
   return s.normalize('NFC').trim().replace(/\s+/g, ' ');
 }
 
 /** Validate the request body and compile §6.3's filter tree.
  *
- * Returns { query, bm25, kinds, filters, parts, theoryParts }:
+ * Returns { query, kinds, filters, parts, theoryParts }:
  *   filters      the tree attached to every leg (null when nothing filters)
  *   parts        each condition's surviving subtokens, in request order — the
  *                §5.1 empty state prints them
@@ -69,8 +65,6 @@ export function compileRequest(body, tokenizer) {
   if (codePoints(query) > QUERY_CAP) {
     throw new SearchError('query_too_long', { cap: QUERY_CAP });
   }
-  const bm25 = body.bm25 === undefined ? true : body.bm25;   // hybrid is the default (D29)
-  if (typeof bm25 !== 'boolean') throw new SearchError('bad_request');
   const rawKinds = body.kinds ?? [];
   if (!Array.isArray(rawKinds)) throw new SearchError('bad_request');
   for (const k of rawKinds) {
@@ -120,38 +114,28 @@ export function compileRequest(body, tokenizer) {
     clauses.length === 0 ? null
     : clauses.length === 1 ? clauses[0]
     : ['And', clauses];
-  return { query, bm25, kinds, filters, parts, theoryParts };
+  return { query, kinds, filters, parts, theoryParts };
 }
 
 
-/** The turbopuffer request body for one search: always a `multi_query`, so
- * the response has one shape (`results[0].rows`) in both retrieval states.
- *
- * With `bm25` (D36 as amended 2026-08-24): the vector leg and the BM25 leg over
- * `interpretation`, fused by turbopuffer's RRF, root-level `limit` capping the
- * fused list (root-level `top_k` is silently ignored — measured, §16.8).
- * Without it: the vector leg alone, no `rerank_by` — measured 2026-08-25 to
- * return exactly the bare query's rows and to bill as one leg.  The filter
- * tree is attached to every leg: §6.6's correctness requirement, and the
- * filter runs first — the 200 are the top of what survives it.
+/** The turbopuffer request body for one search: a `multi_query` with the
+ * vector leg alone (the BM25 leg and RRF fusion were dropped 2026-08-25: the
+ * user measured the hybrid results as worse).  The filter tree rides on the
+ * leg and runs first — the 200 are the top of what survives it (§6.6).
  */
-export function tupfQueryBody({ vector, query, filters, bm25 }) {
-  const leg = (rank_by) => ({
-    rank_by,
-    top_k: RESULT_LIMIT,
-    include_attributes: INCLUDE_ATTRIBUTES,
-    ...(filters ? { filters } : {}),
-  });
-  const queries = [leg(['vector', 'ANN', vector])];
-  if (!bm25) return { queries };
-  queries.push(leg(['interpretation', 'BM25', query]));
-  return { queries, rerank_by: ['RRF', { rank_constant: RRF_CONSTANT }], limit: RESULT_LIMIT };
+export function tupfQueryBody({ vector, filters }) {
+  return {
+    queries: [{
+      rank_by: ['vector', 'ANN', vector],
+      top_k: RESULT_LIMIT,
+      include_attributes: INCLUDE_ATTRIBUTES,
+      ...(filters ? { filters } : {}),
+    }],
+  };
 }
 
 /** The rows of a `multi_query` response.  Exactly one `results` entry is the
- * invariant both states share: a fused request that came back unfused would
- * carry one entry per leg, and that must be an error, not the vector leg
- * served as if fused. */
+ * invariant: anything else is an error, never a guess. */
 export function rowsOf(data) {
   const results = data?.results;
   if (!Array.isArray(results) || results.length !== 1 || !Array.isArray(results[0]?.rows)) {
@@ -212,6 +196,11 @@ export function collapse(rows) {
       position: row.position ?? '',
       source_link: row.source_link ?? '',   // '' is D42's absent form
       interpretation: row.interpretation ?? '',
+      // The namespace's metric is cosine_distance, so this is the cosine
+      // similarity between the query vector and this record's (ruled
+      // 2026-08-25; it is the whole ranking now that the BM25 leg is gone,
+      // hence monotone down the list — the objection D48 was written against).
+      similarity: typeof row.$dist === 'number' ? 1 - row.$dist : null,
     };
     byEntity.set(entity, card);
     cards.push(card);

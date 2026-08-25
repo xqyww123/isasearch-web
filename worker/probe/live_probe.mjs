@@ -6,10 +6,9 @@
 //     node worker/probe/live_probe.mjs
 //
 // What it proves: the multi_query body shape is what turbopuffer accepts; the
-// filter tree rides both legs; a selective filter still fills top_k (the §6.6
-// guarantee, first measured 2026-08-21); the embedding path returns 4096 dims.
-// It also prints billing.billable_logical_bytes_queried off the multi_query
-// (§6.6: billed once per leg, measured 2026-08-24).
+// filter tree rides the vector leg; a selective filter still fills top_k (the
+// §6.6 guarantee, first measured 2026-08-21); the embedding path returns 4096
+// dims.  It also prints billing.billable_logical_bytes_queried.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -53,61 +52,54 @@ async function tupf(body) {
 
 // 1. The embedding path, template included.
 const query = 'a sorted list stays sorted when an element is appended';
-const vector = await fireworksEmbed(embeddingInput(query, []), {
+const vector = await fireworksEmbed(embeddingInput(query), {
   apiKey: FW_KEY, model: process.env.FIREWORKS_MODEL ?? 'fireworks/qwen3-embedding-8b',
 });
 check(vector.length === DIMENSION, `embedding has ${DIMENSION} dimensions`);
 const norm = Math.sqrt(vector.reduce((s, x) => s + x * x, 0));
 check(Math.abs(norm - 1) < 1e-3, 'embedding is unit-normalized', `|v| = ${norm.toFixed(6)}`);
 
-// 2. The hybrid state: one multi_query, RRF-fused, filters on both legs.
+// 2. One multi_query, the vector leg alone, the filter on it.
 const compiled = compileRequest({
   query,
   conditions: [{ on: 'expr', polarity: 'contains', text: 'sorted' }],
 }, tokenizer);
-const hybridBody = tupfQueryBody({
-  vector: Array.from(vector), query, filters: compiled.filters, bm25: true });
-const hybrid = await tupf(hybridBody);
-check(Array.isArray(hybrid.rows), 'multi_query body accepted (rows came back)');
-check(hybrid.rows.length === RESULT_LIMIT,
-      `fused list is capped at root-level limit`, `${hybrid.rows.length} rows`);
-const first = hybrid.rows[0] ?? {};
+const single = await tupf(tupfQueryBody({
+  vector: Array.from(vector), filters: compiled.filters }));
+check(Array.isArray(single.rows), 'multi_query body accepted (rows came back)');
+check(single.rows.length === RESULT_LIMIT,
+      'the vector leg returns the full 200', `${single.rows.length} rows`);
+const first = single.rows[0] ?? {};
 check(typeof first.key === 'string' && typeof first.kind === 'string'
       && typeof first.expr === 'string' && 'source_link' in first,
-      'include_attributes honoured on the fused rows');
-const sortedEverywhere = hybrid.rows.every((r) =>
+      'include_attributes honoured on the rows');
+const sortedEverywhere = single.rows.every((r) =>
   tokenizer.run(r.expr ?? '').includes('sorted'));
-check(sortedEverywhere, 'the filter rode BOTH legs (every fused row satisfies it)');
+check(sortedEverywhere, 'every row satisfies the filter');
 console.log(`INFO  billing off the multi_query: `
-            + JSON.stringify(hybrid.billing ?? null));
+            + JSON.stringify(single.billing ?? null));
 console.log(`INFO  top card: ${JSON.stringify({
   name: first.name, kind: first.kind }, null, 0)}`);
-const cards = collapse(hybrid.rows);
-console.log(`INFO  ${hybrid.rows.length} rows collapse to ${cards.length} cards (D5)`);
+const cards = collapse(single.rows);
+console.log(`INFO  ${single.rows.length} rows collapse to ${cards.length} cards (D5)`);
 
-// 3. The semantic-only state: the vector leg alone.
-const single = await tupf(tupfQueryBody({
-  vector: Array.from(vector), query, filters: compiled.filters, bm25: false }));
-check(single.rows.length === RESULT_LIMIT,
-      'vector leg alone returns the full 200', `${single.rows.length} rows`);
-
-// 4. §6.6's guarantee through this builder: the narrowest kind (proof method,
+// 3. §6.6's guarantee through this builder: the narrowest kind (proof method,
 // 832 rows, ~0.06 % selectivity) still fills top_k under ANN.
 const narrow = compileRequest({ query, kinds: ['proof method'] }, tokenizer);
 const narrowGot = await tupf(tupfQueryBody({
-  vector: Array.from(vector), query, filters: narrow.filters, bm25: true }));
+  vector: Array.from(vector), filters: narrow.filters }));
 check(narrowGot.rows.length === RESULT_LIMIT
       && narrowGot.rows.every((r) => r.kind === 'proof method'),
-      'a ~0.06 %-selective kind filter still fills the fused 200',
+      'a ~0.06 %-selective kind filter still fills the 200',
       `${narrowGot.rows.length} rows, all proof method`);
 
-// 5. excludes(all) = Not(Or(…)): the excluded word appears in none of the three.
+// 4. excludes(all) = Not(Or(…)): the excluded word appears in none of the three.
 const excl = compileRequest({
   query,
   conditions: [{ on: 'all', polarity: 'excludes', text: 'sorted' }],
 }, tokenizer);
 const exclGot = await tupf(tupfQueryBody({
-  vector: Array.from(vector), query, filters: excl.filters, bm25: true }));
+  vector: Array.from(vector), filters: excl.filters }));
 const leakage = exclGot.rows.filter((r) =>
   ['expr', 'name'].some((f) => tokenizer.run(r[f] ?? '').includes('sorted'))
   || (r.theories ?? []).some((t) => tokenizer.run(t).includes('sorted')));

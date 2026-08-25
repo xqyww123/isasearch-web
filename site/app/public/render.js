@@ -54,8 +54,7 @@ export const COPY = {
   // §4.2 — the machine-generated disclosure, locked by D30 and D40
   disclosure: 'Written by a language model from the formal statement, not by the theory\'s '
     + 'authors. It may be imprecise or wrong. Where the explanation and the statement '
-    + 'disagree, the statement is the correct one. Isasearch searches this text as well, '
-    + 'so an entity with a poor explanation may rank lower than it deserves.',
+    + 'disagree, the statement is the correct one.',
   noExplanation: 'No explanation was generated for this entity. Its name and its expression '
     + 'still place it in the results, but the search box works best against an '
     + 'explanation, so this entity is harder to reach by describing it.',
@@ -74,17 +73,13 @@ export const COPY = {
   sourceAbsentHover: 'Some commands do not report a position, so Isasearch cannot provide a link.',
   // §8
   associatedTheories: 'Associated theories',
-  associatedTheoriesNote: 'These are the theories that declare the constants appearing in '
-    + 'this statement. About five times in six the theory where the theorem was proved is '
-    + 'among them, because a statement normally uses constants from its own theory; the '
-    + 'rest of the time it is absent. Isasearch does not mark it either way. Its name is at '
-    + 'the start of the entity name above, up to the first dot.',
+  associatedTheoriesNote:
+    'These are the theories that declare the constants appearing in this statement.',
   source: 'Source',
   sourceNone: 'No source position was recorded for this entity. Some commands do not report one.',
   nearest: 'Nearest entities',
   nearestNote: 'The ten entities closest to this one, compared with each other by the same '
-    + 'measure that compares a query with an entity on the result cards. There is no query '
-    + 'here, so keyword matching is not used.',
+    + 'measure that compares a query with an entity on the result cards.',
   nearestNone: 'Nearest entities are not available for this entity.',
   entityMissing: 'No entity was found at this web address. The entity may have been removed '
     + 'when the index was rebuilt.',
@@ -109,12 +104,24 @@ export const displayName = (card) =>
 export const entityHref = (card) =>
   `/entity/${card.key.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
 
-// §4.4's link text: the file's base name and the line, from `position`
-// (`~~/src/HOL/List.thy:1204` or `$AFP/Entry/File.thy:31`).
-export function sourceText(position) {
-  const m = /([^/]+):(\d+)$/.exec(position ?? '');
-  return m ? `${m[1]}:${m[2]}` : position ?? '';
+// §4.4's link text (rewritten 2026-08-25: the theory's full name and the line).
+// Read off `source_link`, not `position`: the link already carries the theory
+// exactly as Isabelle names it, session included —
+// `/source/HOL-Computational_Algebra.Primes.html#L525` becomes
+// `HOL-Computational_Algebra.Primes.thy:525`.  Deriving it from `position`
+// instead would mean guessing the session from a directory path
+// (`~~/src/HOL/Probability/…` is session `HOL-Probability`, not `HOL.Probability`),
+// and a guessed name that does not exist is worse than none.
+export function sourceText(sourceLink) {
+  const m = /^\/source\/(.+?)\.html(?:#L(\d+))?$/.exec(String(sourceLink ?? ''));
+  if (!m) return String(sourceLink ?? '');
+  return m[2] ? `${m[1]}.thy:${m[2]}` : `${m[1]}.thy`;
 }
+
+// The published source page of a theory, named exactly as the theory is
+// (`HOL.Finite_Set` → `/source/HOL.Finite_Set.html`).  Verified live 2026-08-25
+// for distribution, AFP and `Pure` alike.
+export const theoryHref = (theory) => `/source/${encodeURIComponent(theory)}.html`;
 
 // ---- fragments ------------------------------------------------------------------
 
@@ -122,9 +129,15 @@ export const kindBadge = (kind, big = false) =>
   `<span class="kind${big ? ' kind-big' : ''}"${KIND_HOVER.has(kind) ? ` title="${esc(KIND_HOVER.get(kind))}"` : ''}>`
   + `<span class="kind-dot" style="background: ${kindColor(kind)}"></span>${esc(KIND_LABEL.get(kind) ?? kind)}</span>`;
 
+/** The cosine similarity as the card prints it: three decimals (ruled
+ * 2026-08-25).  Two hid the differences — an embedding model's similarities sit
+ * in a narrow band, so a page of results can read 0.77 all the way down. */
+export const similarityText = (card) =>
+  typeof card.similarity === 'number' ? card.similarity.toFixed(3) : '';
+
 export function sourceLink(card, verbose = false) {
   if (card.source_link) {
-    const a = `<a class="mono" href="${esc(card.source_link)}" title="${esc(COPY.sourceHover)}">${esc(sourceText(card.position))}</a>`;
+    const a = `<a class="mono" href="${esc(card.source_link)}" title="${esc(COPY.sourceHover)}">${esc(sourceText(card.source_link))}</a>`;
     return verbose ? `This entity was produced by the command at ${a}.` : a;   // §8 / §4.4
   }
   return verbose
@@ -132,14 +145,14 @@ export function sourceLink(card, verbose = false) {
     : `<span class="source-absent" title="${esc(COPY.sourceAbsentHover)}">${esc(COPY.sourceAbsent)}</span>`;
 }
 
-// §4.3.  A name-addressed entity: its one theory.  Theorem-alike: nothing,
-// unless a contains-condition reached Theory Name (then `matched_theories` is
-// set by the Worker) — the first matched theory, with the hover.
+// §4.3, narrowed 2026-08-25.  A name-addressed entity's one theory is no longer
+// printed here: the source line under the name now carries the same theory, with
+// its file and line.  What remains is D26's marking — the first theory a
+// contains-condition on Theory Name matched, which only theorem-alike cards can
+// have, and which is NOT where the theorem was proved (hence the hover).
 export function theoryLine(card) {
   const thmAlike = card.kinds.every((k) => THEOREM_ALIKE.has(k));
-  if (!thmAlike) {
-    return `<div class="theory-line mono">${esc(card.theories[0] ?? '')}</div>`;
-  }
+  if (!thmAlike) return '';
   const matched = card.matched_theories?.[0];
   if (!matched) return '';
   return `<div class="theory-line mono" title="${esc(COPY.theoryHover(card.theories.length))}">`

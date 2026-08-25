@@ -12,14 +12,14 @@ hosting); nothing here overrides it.
 | --- | --- |
 | `wrangler.toml` | Bindings and vars — the live namespace name lives here (§8.2: switching an export is editing `TPUF_NAMESPACE` and deploying). No credential, ever. |
 | `src/index.js` | Entry: routing, `/source/*` off R2 with edge caching (HEAD derived from GET), the daily gate call, the asset-sentinel check, the search handler. |
-| `src/search.js` | Pure core: §11.1's query normalisation, request validation, §6.3's filter compilation, the one `multi_query` body for both retrieval states, `rowsOf`, D5's collapse, D26's matched-theory marking. |
-| `src/kinds.js` | One table: the eleven stored kind values with their instruction phrases; canonical kind order; the exact embedding input text (a snapshot of the DB library's defaults). |
+| `src/search.js` | Pure core: §11.1's query normalisation, request validation, §6.3's filter compilation, the `multi_query` body (the vector leg alone), `rowsOf`, D5's collapse, D26's matched-theory marking. |
+| `src/kinds.js` | The eleven stored kind values and their canonical order, and the exact embedding input text. The instruction is fixed (ruled 2026-08-25): the kind selection filters and nothing else, so it no longer reaches the query vector. |
 | `src/embed.js` | Fireworks Qwen3-Embedding-8B with the KV cache (keyed on the SHA-256 of the exact text sent; the write rides `ctx.waitUntil`). |
 | `src/gate.js` | The `DailyGate` Durable Object: exact per-address daily counts and the `daily` statistics table. |
 | `src/pages.js` | The pages (§9.5): the shell around a fragment from `../site/app/pages/`, the search page, the about page, the entity page built from one record. Card markup comes from `../site/app/public/render.js`, shared with the browser. |
 | `src/blake2b.js` | BLAKE2b, for §6.2's document id of a universal key — `/entity/<key>` fetches by primary key. Checked against Python on `test/blake2b.vectors.json`. |
-| `test/` | Unit tests over the pure core and the hash: `node --test worker/test` (23). |
-| `probe/live_probe.mjs` | Read-only integration probe against the real Fireworks endpoint and the live namespace (see its header). Nine checks, all passing 2026-08-25. |
+| `test/` | Unit tests over the pure core and the hash: `node --test worker/test` (22). |
+| `probe/live_probe.mjs` | Read-only integration probe against the real Fireworks endpoint and the live namespace (see its header). Eight checks, all passing 2026-08-25 against the live index after the BM25 leg was dropped and the query instruction fixed. |
 
 The tokenizer is imported from `../site/tokenizer/` — the single
 JavaScript implementation, never copied. `asset.json` is imported as text so
@@ -48,7 +48,6 @@ which every page prints; a republish writes them (ruled 2026-08-25).
 ```jsonc
 {
   "query": "a sorted list stays sorted when an element is appended",  // required, ≤8000 code points after normalisation (D7, D29)
-  "bm25": true,                    // optional boolean; default true: hybrid RRF; false: the vector leg alone (D36 as amended)
   "kinds": ["lemma"],              // stored kind values, any order; [] (the default) or all eleven sends no kind condition (D29 as amended)
   "conditions": [                  // each ≤512 code points, at most 64
     { "on": "expr", "polarity": "contains", "text": "sorted_wrt" }
@@ -64,8 +63,10 @@ byte but the kind tag — (`id` — the highest-ranked member record's document
 id, the entity page the card links to — `key`, `name`, `from_collection`,
 `kinds`, `expr`, `theories`, `position`, `source_link`, `interpretation`, plus
 `matched_theories` when a contains-condition reaches the Theory Name field
-directly or through All); no relevance number anywhere (D48);
-`limit_reached` says whether the fused 200-row cap was hit (§4.5's
+directly or through All);
+`similarity` — the cosine similarity (1 − `$dist`; the namespace's metric is
+`cosine_distance`), which the card prints to three decimals and which is now the
+whole ranking; `limit_reached` says whether the 200-row cap was hit (§4.5's
 end-of-list copy branches on it); `parts` is each condition's surviving
 subtokens, which the §5.1 empty state prints.
 

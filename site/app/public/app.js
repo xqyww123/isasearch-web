@@ -2,17 +2,18 @@
 // fragments in index.html; every string is site/COPY.md's (section named).
 import { KINDS, KIND_LABEL, KIND_HOVER, THEOREM_ALIKE, COPY, thin, esc,
          displayName, entityHref, kindBadge, kindColor, sourceLink, theoryLine,
-         explanation } from '/render.js';
+         explanation, similarityText } from '/render.js';
 
 const PAGE = 20;
+// The All panel was removed from the interface 2026-08-25 (the API still
+// accepts on: 'all'); a condition now names exactly one field.
 const PANELS = [['name', 'Entity Name'], ['expr', 'Expression'],
-                ['theory', 'Theory Name'], ['all', 'All']];
+                ['theory', 'Theory Name']];
 const PANEL_LABEL = new Map(PANELS);
 
 const state = {
-  bm25: true,
   kinds: new Set(),
-  conditions: { name: [], expr: [], theory: [], all: [] },   // {polarity, text}
+  conditions: { name: [], expr: [], theory: [] },   // {polarity, text}
   sent: null,        // the request that produced `response`
   response: null,
   page: 0,
@@ -94,7 +95,7 @@ function refreshFilters() {
   // §3.4: Theorem or a derived rule in play (an empty selection is every kind)
   // AND a condition reaching Theory Name, directly or through All.
   const thmAlike = state.kinds.size === 0 || [...state.kinds].some((k) => THEOREM_ALIKE.has(k));
-  const reaches = [...state.conditions.theory, ...state.conditions.all].some((c) => c.text.trim());
+  const reaches = state.conditions.theory.some((c) => c.text.trim());
   const show = thmAlike && reaches;
   $('theory-caveat').hidden = !show;
   $('theory-caveat-spacer').hidden = !show;
@@ -110,23 +111,22 @@ function setFiltersOpen(open) {
 function initFilters() {
   for (const [p] of PANELS) renderConditions(p);
   renderKinds();
-  $('bm25').addEventListener('change', (e) => { state.bm25 = e.target.checked; });
   $('filters-bar').addEventListener('click', () => setFiltersOpen($('filters').dataset.open !== 'true'));
   $('clear-all').addEventListener('click', () => {
     for (const [p] of PANELS) state.conditions[p] = [];
-    state.kinds.clear(); state.bm25 = true; $('bm25').checked = true;
+    state.kinds.clear();
     for (const [p] of PANELS) renderConditions(p);
     renderKinds(); refreshFilters();
   });
-  $('filters-home').append($('filters'));
+  moveShared('home');
   refreshFilters();
 }
 
 // ---- searching (§6, §7) ----------------------------------------------------------
 async function search(query, { fromAddress = false } = {}) {
   query = query.trim();
-  if (!query) { showMessage('Enter a query. The filters do nothing but narrow the results; they cannot search by themselves.'); return; }   // §5.7
-  const body = { query, bm25: state.bm25, kinds: [...state.kinds], conditions: activeConditions() };
+  if (!query) { showMessage('Enter a query. The syntactic filters only narrow the results; they cannot search by themselves.'); return; }   // §5.7
+  const body = { query, kinds: [...state.kinds], conditions: activeConditions() };
   if (!fromAddress) {
     const url = `/?q=${encodeURIComponent(query)}`;
     if (url !== location.pathname + location.search) history.pushState(null, '', url);
@@ -154,7 +154,7 @@ function showError(error, body) {
     daily_limit: 'Your network has reached the limit of 1 000 searches for today. You can search again after 00:00 UTC. Turning a page of results does not count. This limit counts every search from an address, so an address shared by many people reaches it faster than one used by a single person.',
     query_too_long: 'The text in the search box is too long. The limit is 8 000 characters.',
     condition_too_long: 'This condition is too long. The limit is 512 characters.',
-    query_missing: 'Enter a query. The filters do nothing but narrow the results; they cannot search by themselves.',
+    query_missing: 'Enter a query. The syntactic filters only narrow the results; they cannot search by themselves.',
   }[error.code];
   if (error.code === 'condition_empty' || error.code === 'condition_too_long') {
     // §5.6 / §7: under the condition itself.
@@ -170,11 +170,22 @@ function showError(error, body) {
   showMessage(text ?? 'The search did not finish. Try again. If it continues to fail, the problem is with the site and not with your query.');
 }
 
+// The panel group and the message element live in exactly one copy each; both
+// states borrow them.  A message raised on the landing page (§5.7) must be
+// visible there, so it moves with the state.
+function moveShared(where) {
+  for (const [id, home] of [['filters', `filters-${where}`], ['message', `message-${where}`]]) {
+    if ($(id).parentElement !== $(home)) $(home).append($(id));
+  }
+}
+
 function leaveResults() {
   $('landing').hidden = false;
   $('results').hidden = true;
   $('header-search').hidden = true;
-  if ($('filters').parentElement !== $('filters-home')) { $('filters-home').append($('filters')); setFiltersOpen(true); }
+  if ($('filters').parentElement !== $('filters-home')) setFiltersOpen(false);   // §2: collapsed on the landing page
+  moveShared('home');
+  $('message').hidden = true;      // leaving the results never carries a message back
 }
 
 function enterResults(query) {
@@ -182,7 +193,8 @@ function enterResults(query) {
   $('results').hidden = false;
   $('header-search').hidden = false;
   $('q-header').value = query;
-  if ($('filters').parentElement !== $('filters-results')) { $('filters-results').append($('filters')); setFiltersOpen(false); }
+  if ($('filters').parentElement !== $('filters-results')) setFiltersOpen(false);
+  moveShared('results');
 }
 
 function clearResults() {
@@ -208,15 +220,26 @@ function renderResults() {
   const pager = $('pager'); pager.replaceChildren();
   if (results.length > PAGE) {
     pager.hidden = false;
-    if (state.page > 0) pager.append(button('previous 20', () => { state.page -= 1; renderResults(); window.scrollTo(0, 0); }));
-    if (state.page > 0 && end < results.length) pager.append(el('<span class="dot">·</span>'));
-    if (end < results.length) pager.append(button('next 20', () => { state.page += 1; renderResults(); window.scrollTo(0, 0); }));
+    const pages = Math.ceil(results.length / PAGE);
+    const turn = (to) => () => { state.page = to; renderResults(); window.scrollTo(0, 0); };
+    // The buttons alone never say where you are; the middle does, and it holds
+    // the row's shape whether or not both buttons exist.
+    pager.append(state.page > 0
+      ? button('previous 20', turn(state.page - 1))
+      : el('<span class="pager-gap"></span>'));
+    pager.append(el(`<span class="pager-where">${thin(start + 1)}&ndash;${thin(end)} of ${thin(results.length)}`
+      + `<span class="pager-page">page ${state.page + 1} of ${pages}</span></span>`));
+    pager.append(end < results.length
+      ? button('next 20', turn(state.page + 1))
+      : el('<span class="pager-gap"></span>'));
   }
   if (end === results.length) {   // §4.5, at the end of the results
     $('list-end').hidden = false;
+    // §4.5.  `limit_reached` is "the retrieval came back full" (200 rows), which
+    // is why the capped sentence says others exist rather than proving it.
     $('list-end').textContent = limit_reached
-      ? 'No more results. Isasearch ranks every entity that satisfies your conditions and returns the best 200. If what you want is not among them, add a condition to narrow the search.'
-      : 'These are all the entities that satisfy your conditions. To see more, remove a condition or select more kinds.';
+      ? `Isasearch returned the ${thin(results.length)} most relevant entities for this search. Others also satisfy your conditions but were not returned. If what you are looking for is not among them, add a condition to narrow the search.`
+      : `These are all ${thin(results.length)} entities that satisfy your conditions.`;
   }
 }
 
@@ -236,6 +259,8 @@ function renderCard(card, index) {
       <div class="card-head">
         <a class="card-name" href="${esc(entityHref(card))}">${esc(displayName(card))}</a>
         <div class="card-kinds">${card.kinds.map((k) => kindBadge(k)).join('')}</div>
+        <div class="card-source">${sourceLink(card)}</div>
+        <div class="card-score" title="Cosine similarity between your query and this entity">${esc(similarityText(card))}</div>
       </div>
       ${theoryLine(card)}
       <div class="expr-wrap" data-clipped="${long && !exprOpen}"><pre class="expr">${esc(card.expr)}</pre></div>
@@ -243,20 +268,10 @@ function renderCard(card, index) {
       <button type="button" class="expl-toggle">${explOpen ? '&#9662; explanation &mdash; machine-generated' : '&#9656; explanation'}</button>
       ${explOpen ? `<div class="expl">${explanation(card)}</div>` : ''}
     </div>
-    <div class="card-side">
-      <button type="button" class="small-button copy" title="${esc(COPY.copy)}">copy</button>
-      ${sourceLink(card)}
-    </div>
   </article>`);
   const toggle = (set) => { set.has(key) ? set.delete(key) : set.add(key); renderResults(); };
   node.querySelector('.expr-toggle')?.addEventListener('click', () => toggle(state.open.expr));
   node.querySelector('.expl-toggle').addEventListener('click', () => toggle(state.open.expl));
-  const copy = node.querySelector('.copy');
-  copy.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(card.expr); copy.textContent = COPY.copied; }
-    catch { copy.textContent = COPY.copyFailed; }
-    setTimeout(() => { copy.textContent = 'copy'; }, 2000);
-  });
   return node;
 }
 

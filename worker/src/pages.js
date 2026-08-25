@@ -9,13 +9,14 @@ import indexPage from '../../site/app/pages/index.html';
 import aboutPage from '../../site/app/pages/about.html';
 import entityPage from '../../site/app/pages/entity.html';
 import { esc, thin, displayName, entityHref, kindBadge, kindColor, KIND_LABEL,
-         sourceLink, explanation, THEOREM_ALIKE, COPY } from '../../site/app/public/render.js';
+         sourceLink, explanation, THEOREM_ALIKE, COPY,
+         theoryHref } from '../../site/app/public/render.js';
 
 const fill = (template, slots) =>
   template.replace(/\{\{(\w+)\}\}/g, (_, k) => slots[k] ?? '');
 
 /** `site` is what the sentinel row and wrangler vars say: entities, built,
- * release, snapshot — every page prints them. */
+ * release, snapshot, model — every page prints them. */
 export function page(fragment, site, { title, head = '', ...slots }) {
   const common = { ...site, entities: thin(site.entities), title, head };
   return fill(shell, { ...common, main: fill(fragment, { ...common, ...slots }) });
@@ -28,10 +29,13 @@ export const aboutPageOf = (site) => page(aboutPage, site, { title: 'About Isase
 
 export function entityPageOf(card, nearest, site) {
   const thmAlike = THEOREM_ALIKE.has(card.kinds[0]);
+  // Each theory links to its published source page (ruled 2026-08-25).
+  const chip = (t) =>
+    `<a class="theory-chip" href="${esc(theoryHref(t))}">${esc(t)}</a>`;
   const theories = thmAlike
     ? `<span class="section-note">${esc(COPY.associatedTheoriesNote)}</span>`
-      + `<div class="theory-chips">${card.theories.map((t) => `<span class="theory-chip">${esc(t)}</span>`).join('')}</div>`
-    : `<div class="theory-chips"><span class="theory-chip">${esc(card.theories[0] ?? '')}</span></div>`;
+      + `<div class="theory-chips">${card.theories.map(chip).join('')}</div>`
+    : `<div class="theory-chips">${card.theories[0] ? chip(card.theories[0]) : ''}</div>`;
   const list = nearest.length
     ? nearest.map((n) => `<a href="${esc(entityHref(n))}"><span class="name">${esc(displayName(n))}</span>`
         + `<span class="meta"><span class="kind-dot" style="background: ${kindColor(n.kinds[0])}"></span>${esc(KIND_LABEL.get(n.kinds[0]) ?? n.kinds[0])}`
