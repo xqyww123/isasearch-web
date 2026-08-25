@@ -735,3 +735,63 @@ told apart only by the source link. Default: keep as is.
 
 Later: sitemaps (§9.4) with the Q13 re-export (`_`/`.` as tokens, tests the
 one-command pipeline); post-deploy code review; usage-stats endpoint.
+
+---
+
+## STATE AT COMPACT #5 (2026-08-25, evening) — DEPLOYED, ONE COMMIT AHEAD
+
+**The site is live with today's work.** Deployed version `6e38ad41`; verified on
+the live site right after: the landing intro and placeholder, the about page's
+seven-row table, three-decimal similarities in the API, and — the point of the
+day's biggest change — the same query with and without `kinds:["lemma"]` gives
+identical similarities and order for the top three (0.884 / 0.881 / 0.875), so
+the kind selection filters and no longer reranks.
+
+**Four commits on `main`, none pushed:**
+`64914bf` the front end pass · `0d9589f` usage statistics + `daily_geo` ·
+`9a5a5eb` the entity page reads the one string table · `f466ed1` sticky footer.
+
+**`f466ed1` is NOT on the live site** — the user ruled it rides with the next
+deployment.
+
+### What changed today, in one place
+
+Retrieval: BM25 and the RRF fusion are gone (the user judged the hybrid results
+worse); the query instruction is fixed to the constant phrase, so the kind
+selection no longer enters the query vector (plan §6.3b, D29/D36 amended); the
+cards print the cosine similarity to three decimals (reversing D48, whose ground
+was the fused score).
+
+Interface: Syntactic Filters, collapsed on arrival, four panels — the All panel
+and all five panel-heading hovers are deleted; the foot of the group is the
+user's own line beside Clear All; the card is one column with the source
+location and the similarity on the name's row; the pager says where you are; the
+end-of-list copy no longer says "No more results" when more exist; the entity
+page's theory chips link to their published source; the about page opens with a
+table of what the site knows about itself, including the embedding model and the
+two usage numbers.
+
+Storage: `daily_geo (day, country, asn, searches)`, kept for good — country and
+AS used to live only in the two-day rate-limit table and were being discarded
+nightly, which was an oversight and not a ruling.
+
+`site/COPY.md` is draft 5 and matches the built site; nothing in it is
+outstanding.
+
+### NEXT ACTS
+
+1. **Purge the Cloudflare edge cache** if it has not been done since the deploy
+   — the entity pages and the two HTML pages are cached four hours, so visitors
+   may still be served the old copy. Dashboard → qiyuan.me → Caching →
+   Configuration → Purge Everything (the zone is Free; purge-by-prefix is
+   Enterprise-only).
+2. **Push** the four commits (origin only — the repo has four remotes).
+3. **Housekeeping**: the local `wrangler dev` is still running and
+   `worker/.dev.vars` still exists; both can go now that the deploy is done.
+4. Later, all previously deferred: the sitemaps (§9.4, ~1.34 M URLs); Q13's
+   re-export with `_` and `.` as matchable tokens, which also tests the
+   one-command publish; an authenticated endpoint over `stats()` and `geo()`,
+   which nothing reads yet.
+5. Undecided and harmless: the thin-space digit grouping (`1 230 467`) against
+   the user's comma form (`1,230,467`) — COPY §1's rule stands unless he says
+   otherwise.
