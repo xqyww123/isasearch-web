@@ -16,6 +16,7 @@ tree of rendered Isabelle source pages.
 | `tests/` | The pytest suites (`python -m pytest tests/`). |
 | `site/` | Interface design (`design/`), the tokenizer asset and its JavaScript port (`tokenizer/`), measurement prototypes (`prototype/`), review archives (`review/`), approved interface copy (`COPY.md`). |
 | `pipeline/` | Versioned pipeline state: the continuation/handover file, the scan and map artefacts the live namespace is pinned to, review transcripts, the executed live-patch checkpoint. |
+| `worker/` | The Cloudflare Worker (plan §12.2 step 5): the search API, the daily rate gate, `/source/*` served from the R2 bucket. See `worker/README.md`. |
 | `published/` | The generated published tree (git-ignored, 5+ GB; rebuilt by `python src/site_source_pages.py publish`). |
 
 ## Dependencies and credentials

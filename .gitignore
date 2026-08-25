@@ -4,3 +4,8 @@
 
 __pycache__/
 *.pyc
+
+# Worker local dev secrets (wrangler .dev.vars) — never versioned
+worker/.dev.vars
+worker/node_modules/
+worker/.wrangler/

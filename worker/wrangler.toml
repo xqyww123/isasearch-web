@@ -1,0 +1,56 @@
+# The isasearch Worker (§12.2 step 5).  NO credential lives in this file or
+# anywhere in the repository (§12.1): the three secrets are set with
+#   wrangler secret put TURBOPUFFER_API_KEY   (a READ-ONLY key in production)
+#   wrangler secret put FIREWORKS_API_KEY
+#   wrangler secret put IP_HASH_SALT          (any long random string; fixed for
+#                                              the site's life — it is what lets
+#                                              a returning address be counted)
+# and exist only in Cloudflare.
+
+name = "isasearch"
+main = "src/index.js"
+compatibility_date = "2026-05-03"
+
+# The tokenizer asset is imported as text so the Worker can hash the committed
+# file's bytes and compare with the digest the export recorded (§8.2 sentinel).
+[[rules]]
+type = "Text"
+globs = ["**/asset.json"]
+
+# D18: everything North America.  Smart Placement puts the Worker next to
+# Fireworks and turbopuffer instead of next to the visitor; it governs the
+# /source/* route too (accepted 2026-08-25 — the zone cache rule serves the
+# hot path at the visitor's edge; a cold page pays one round trip).
+[placement]
+mode = "smart"
+
+[vars]
+# §8.2: the namespace name is the Worker's only pointer at the data — switching
+# an export live means editing this value and deploying.  Its companion
+# `<name>.asset` carries the asset digest the Worker checks itself against.
+TPUF_NAMESPACE = "isasearch-2025-2-afp-2026-05-13"
+TPUF_REGION = "aws-us-west-2"
+FIREWORKS_MODEL = "fireworks/qwen3-embedding-8b"
+
+[[r2_buckets]]
+binding = "SOURCE_BUCKET"
+bucket_name = "isasearch"
+
+# The query-embedding cache (§11.1).  Created at deployment
+# (`wrangler kv namespace create EMBED_KV`); fill the id then.
+[[kv_namespaces]]
+binding = "EMBED_KV"
+id = "FILL-AT-DEPLOYMENT"
+
+# §11.1 layer 2: the per-address daily counter and the usage statistics, one
+# Durable Object for the whole site (ruled 2026-08-25).
+[[durable_objects.bindings]]
+name = "DAILY_GATE"
+class_name = "DailyGate"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["DailyGate"]
+
+# D17: the Worker owns isabelle-semantics.qiyuan.me.  Wired at deployment:
+# routes = [{ pattern = "isabelle-semantics.qiyuan.me", custom_domain = true }]

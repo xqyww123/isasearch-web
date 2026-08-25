@@ -161,7 +161,9 @@ reader of those sections needs to find the decision that used to govern them.
   interpretation and single `kind`. Cross-kind duplicates — the same `(name,
   entity expression)` recorded once as a `Theorem` and again as an
   `Introduction rule` — are collapsed **in the response, after ranking**, into
-  one card whose kinds are the union and whose interpretation is **the
+  one card whose kinds are the union (of the members that reached the result
+  set — D38's stored group-wide union was withdrawn 2026-08-25) and whose
+  interpretation is **the
   highest-scoring member's**. The original decision merged at export time; it
   was reversed because nothing could say which member supplied the id, the
   vector or the interpretation, and all three genuinely differ (the kind is
@@ -247,6 +249,13 @@ reader of those sections needs to find the decision that used to govern them.
   were "那我建议把所有的 regions 全放在北美" — *all* the regions, so this binds any
   later component that acquires a region or a jurisdiction (a Durable Object's home,
   a KV or D1 jurisdiction), not only the namespace this decision used to name alone.
+
+  **Extended 2026-08-25 (user-ruled): Smart Placement governs `/source/*` too.**
+  Placement is per Worker, not per route, and §17.8 put the published tree on
+  the same Worker as the search API, so a source page is fetched by the Worker
+  in North America rather than at the visitor's edge. The user accepted this
+  over splitting `/source/*` into a second Worker: the zone cache rule serves
+  the hot path at the visitor's edge, and a cold page pays one round trip.
 - **D19** — **the U+007F repair runs on this machine and Hugging Face is
   uploaded from here.** Premise given by the user: this machine, `cslh19` and
   Hugging Face are currently in sync.
@@ -849,11 +858,18 @@ reader of those sections needs to find the decision that used to govern them.
   disjoint record kinds rather than one containing the other, which is a
   labelling matter for a tooltip and not a functional one — under D29's
   default (nothing selected, restricting nothing, as amended 2026-08-24)
-  most users never meet it. The export additionally
+  most users never meet it. ~~The export additionally
   stores, on every record, the full set of kinds its `(name, entity expression)`
   group appears under, so a card's kind badges are complete and do not vary with
   which group members reached the result set; it is aggregated during the §8.1
-  grouping step at effectively no cost.
+  grouping step at effectively no cost.~~ **Withdrawn by the user, 2026-08-25.**
+  The clause was never implemented on either side — §6.1's schema never listed
+  such a field — and the Worker's adversarial review found the code silently
+  implementing the alternative. Ruled: a card's kind badges are the kinds of
+  the group members that reached the result set, so they can differ between
+  two searches for the same entity; the user judged this unimportant. The
+  `Introduction rule` button's hover, which promised both labels on one card,
+  is deleted with it (COPY §3.6).
 - **D37** (2026-08-14) — **variable names stay in the index; the noise is
   accepted.** D4 discards `?`, which demotes a schematic variable to an ordinary
   name, so `P`, `Q`, `x`, `f` are indexed exactly like constant names. The cost
@@ -2402,10 +2418,15 @@ mechanism one panel away — this asymmetry is design, recorded here and NOT
 explained in the interface. The control's visible copy needs the user's
 verbatim approval before it ships.
 
-Unmeasured, and deliberately not a design input: whether turbopuffer bills a
+~~Unmeasured, and deliberately not a design input: whether turbopuffer bills a
 `multi_query` once or once per leg. Cost is not a constraint on this plan
 (D28), so it does not bear on any choice above. It is settled by reading
-`billing.billable_logical_bytes_queried` off one `multi_query` response.
+`billing.billable_logical_bytes_queried` off one `multi_query` response.~~
+**Measured 2026-08-24, during the Worker build: once per leg.** A two-leg
+fused `multi_query` against the live namespace returned
+`billable_logical_bytes_queried: 23,971,467,722` — twice the namespace's
+logical size — so each leg is billed as its own full-namespace query. As the
+paragraph said, this is information, not a design input (D28).
 
 ## 7. Theories for filtering
 
@@ -2738,6 +2759,20 @@ guarantee back, if it is ever wanted, is for the export to write one extra docum
 carrying the asset's SHA-256 and for the Worker to refuse to serve when it does not
 match its own asset; that was offered on 2026-08-20 and left for §11's work.
 
+**Built, 2026-08-25 (user-ruled: "赞同建").** The guarantee lives in a
+**companion namespace `<namespace>.asset`** holding one row — the asset's
+SHA-256 (the digest of the committed `site/tokenizer/asset.json` bytes) and its
+`tokenizer_rule`. It is a namespace of its own because every turbopuffer row
+must carry a vector (measured), so a sentinel row inside the data namespace
+would be an ANN candidate; the `.asset` suffix can never collide with a `-N`
+generation name. The export writes it after a full run, beside `commit_asset`;
+`python src/site_export.py --asset-sentinel-only --namespace <ns>` writes it
+for a namespace exported before the sentinel existed (done for the live
+namespace, digest `9fadd5c55bc9…`). The Worker hashes its own bundled asset
+bytes, reads the companion once per instance, and answers every search with an
+error while the two differ. The retirement step of the cycle below deletes the
+companion with its data namespace.
+
 **Switching is a Worker deployment, and that is the whole mechanism.** turbopuffer
 has no alias or pointer: the namespace name is its only address, so the name lives in
 the Worker's configuration and switching means changing that value — one `wrangler`
@@ -3013,21 +3048,39 @@ move he refused. It stands because he set 5-per-10-seconds himself afterwards, n
 because the plumbing required it, and a future proposal to lower it is re-opening a
 question he has already closed twice.
 
-**Layer 2 — a per-IP daily counter in Workers KV, 1,000 requests per UTC day.**
-Key `rl:<hash of the IP>:<YYYY-MM-DD>`, TTL ~26 h so it expires itself. The IP
-is stored **hashed with a rotating salt, never in the clear** — the gate needs
-the equivalence "same client", not the address. On trip: 429 with `Retry-After`
-set to UTC midnight.
+**Layer 2 — a per-IP daily counter, 1,000 requests per UTC day.** ~~In Workers
+KV: key `rl:<hash of the IP>:<YYYY-MM-DD>`, TTL ~26 h so it expires itself. The IP
+is stored **hashed with a rotating salt, never in the clear**~~ — **amended
+2026-08-25 (user-ruled) after the Worker's adversarial review**: a KV counter is
+a non-atomic read-modify-write behind a read cache of at least 60 s, so it could
+not deliver the exact "1 000" COPY §7 promises. The counter now lives in **one
+Durable Object for the whole site** (`DailyGate`, SQLite-backed): requests to it
+execute one at a time, so `INSERT … ON CONFLICT DO UPDATE SET count = count + 1
+RETURNING count` is atomic and the count exact. Table `counters (day, ip_hash,
+count, country, asn)`, rows older than yesterday dropped on the day's first
+request; table `daily (day, searches, rejected, addresses)` kept for good as the
+site's **usage statistics** (a new purpose, user-ruled the same day). The IP is
+stored only as `SHA-256(salt | ip)` under a **fixed** secret salt — fixed, not
+rotating, so a returning address counts as the same address; still never in the
+clear, and no row can be turned back into an address. `country` and `asn` come
+from Cloudflare's own request metadata (`cf.country`, `cf.asn`; the AS name is
+not stored). No query text is ever stored. On trip: 429 with `Retry-After` set
+to UTC midnight. The Durable Object's home is placed on first access, next to
+the Smart-Placed Worker in North America (D18). Layer 3 remains unbuilt; this
+object counts per address only.
 
 **Layer 1 is what makes layer 2 work, and must not be removed as redundant.**
-KV limits writes to a *single key* to 1 per second, on every plan, and one IP's
+~~KV limits writes to a *single key* to 1 per second, on every plan, and one IP's
 counter is one key. Without layer 1 a client hammering at 10 requests/second
 would have most of its increments dropped and the counter would under-count
-precisely against the behaviour it exists to catch. Layer 1 caps the sustained
-rate at 0.5 requests/second, comfortably under that limit. (A momentary burst
-of 5 within one second can still exceed 1 write/second and lose an increment or
-two; against a 1,000/day budget that is immaterial. The guarantee that matters
-is on the sustained rate.)
+precisely against the behaviour it exists to catch.~~ (The KV argument is moot
+under the 2026-08-25 amendment; the Durable Object counts exactly at any rate.)
+Layer 1 still stands as the burst bound — layer 2 only counts per day — and
+caps the sustained rate at 0.5 requests/second. **Its scope, settled 2026-08-25:
+the edge rule applies to `/api/search` only.** §17.8 put the published tree
+behind the same domain, and a cold source page is HTML + CSS + several of the 13
+`@font-face` files inside one second — a rule over the whole domain would 429
+visitors on their own fonts. The threshold is not reopened by this.
 
 **Layer 3 — a global gate, specified and not built, with the user's agreement.**
 The gate was his own instruction, on 2026-08-13 and ninety seconds after he cancelled
@@ -3088,6 +3141,16 @@ reading more documentation.
 A **query-embedding cache in Workers KV**, keyed on the normalised query
 string, remains worth building: search traffic is strongly Zipf-distributed, so
 it removes more Fireworks calls than any rate limit and cuts latency on a hit.
+**"Normalised" defined, 2026-08-25 (user-ruled):** NFC, then trimmed, then every
+inner run of whitespace folded to one space — and nothing more; case folding or
+punctuation stripping would change retrieval. The Worker applies it once, and
+the embedding input, the BM25 leg and the cache key all see that one string.
+The key is in fact the SHA-256 of the whole instruction-wrapped text (§6.3's
+query template with the `{kinds}` phrase filled in), which is stricter than
+"the query string": the phrase changes the vector, so a different kind
+selection must embed separately. The kind selection is itself canonicalised
+first (deduplicated, fixed order, all eleven ≡ none), so click order cannot
+split the cache or the ranking.
 **Cloudflare Turnstile** stays in reserve if the two built layers prove
 insufficient.
 
@@ -3292,6 +3355,11 @@ site/
                           limits, entity page rendering
   pages/                  static assets: subsetted IsabelleDejaVu, styles, scripts
 ```
+
+**The Worker is built (2026-08-25) and lives at `worker/` at the repository
+root**, not `site/worker/` — user-ruled with the migration's flat layout
+(`src/`, `site/`, `pipeline/`, `worker/`), `site/` holding design and assets
+rather than runtime code. `worker/README.md` describes it.
 
 `test_site_export.py` sits beside `test_isabelle_tokenizer.py` at the repository
 root, and needs neither the store, nor the Isabelle installation, nor the network.

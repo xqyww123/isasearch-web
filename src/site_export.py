@@ -445,6 +445,36 @@ def emit_asset(path: str, *, change_intended: bool) -> 'tuple[dict, str, str]':
     return asset, text, digest
 
 
+# The companion namespace that names the asset a data namespace was built under
+# (§8.2, ruled 2026-08-25).  One row; the Worker reads it once per instance and
+# refuses to serve when the digest is not its own asset's.  It is a namespace of
+# its own because every turbopuffer row must carry a vector, so a sentinel row
+# inside the data namespace would be an ANN candidate.  The `.asset` suffix can
+# never collide with a `-N` generation name, and the two are retired together.
+ASSET_NAMESPACE_SUFFIX = ".asset"
+ASSET_SENTINEL_ID = str(uuid.UUID(bytes=_hash128(b"isasearch tokenizer asset")))
+
+
+def asset_namespace(namespace: str) -> str:
+    return namespace + ASSET_NAMESPACE_SUFFIX
+
+
+def write_asset_sentinel(namespace: str, asset: dict, digest: str, *,
+                         region: str, key: str) -> None:
+    """Write (or overwrite) the companion namespace's single row."""
+    request("POST", f"/v2/namespaces/{asset_namespace(namespace)}", {
+        "distance_metric": "cosine_distance",
+        "schema": {"id": "uuid",
+                   "vector": {"type": "[2]f32", "ann": True},
+                   "digest": {"type": "string", "filterable": False},
+                   "tokenizer_rule": {"type": "int", "filterable": False}},
+        "upsert_rows": [{"id": ASSET_SENTINEL_ID, "vector": [1.0, 0.0],
+                         "digest": digest,
+                         "tokenizer_rule": asset["tokenizer_rule"]}],
+    }, region=region, key=key)
+    _log(f"{asset_namespace(namespace)}: asset digest {digest[:12]} recorded")
+
+
 def commit_asset(path: str, text: str) -> None:
     """Record this export's asset as the one the next export compares against."""
     with open(path, "w", encoding="utf-8") as f:
@@ -896,7 +926,9 @@ def run(*, isabelle_home: str, afp_dir: str, committed_asset: str,
 
     if not dump and not limit:
         # The committed asset declares what is DEPLOYED (D46), so only a run that
-        # deployed the whole corpus may move it.
+        # deployed the whole corpus may move it — and only such a run names the
+        # asset its namespace answers to.
+        write_asset_sentinel(namespace, asset, digest, region=region, key=key)
         commit_asset(committed_asset, text)
     for what, n in counts.items():
         _log(f"  {what:<14} {n}")
@@ -952,12 +984,34 @@ def build_parser(**kw) -> argparse.ArgumentParser:
     p.add_argument("--skip-completeness-gate", action="store_true",
                    help="do not check that every shippable record has a vector; "
                         "for a --limit run, never for a real export")
+    p.add_argument("--asset-sentinel-only", action="store_true",
+                   help="write only the companion `.asset` namespace for "
+                        "--namespace, from the committed asset; for a namespace "
+                        "exported before the sentinel existed")
     return p
+
+
+def write_sentinel_from_committed(namespace: str, committed_asset: str, *,
+                                  region: str) -> None:
+    """The one-off for a namespace that predates the sentinel: the committed asset
+    IS what that namespace was built under (D46's invariant), so its digest is
+    what the sentinel must say."""
+    with open(committed_asset, encoding="utf-8") as f:
+        text = f.read()
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    write_asset_sentinel(namespace, json.loads(text), digest,
+                         region=region, key=api_key())
 
 
 def run_from_args(args: argparse.Namespace) -> int:
     """The body both entry points share: locate the trees, run, report a failure."""
     try:
+        if args.asset_sentinel_only:
+            if not args.namespace:
+                raise ExportError("--asset-sentinel-only needs --namespace")
+            write_sentinel_from_committed(args.namespace, args.committed_asset,
+                                          region=args.region)
+            return 0
         home, afp = args.isabelle_home, args.afp
         if not (home and afp):
             found_home, found_afp = _default_trees()

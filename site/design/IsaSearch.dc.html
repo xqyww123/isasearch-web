@@ -53,14 +53,14 @@
       <div style="width: 840px; display: flex; flex-direction: column; gap: 14px">
         <div style="display: flex; flex-direction: column; gap: 7px; margin-bottom: 12px">
           <h1 style="margin: 0; font-size: 30px; font-weight: 600; letter-spacing: -0.02em; color: #1b1b19">isasearch</h1>
-          <div style="font-size: 14px; line-height: 1.6; color: #5f5d57; text-wrap: pretty">Search Isabelle/HOL and the Archive of Formal Proofs by describing what you want in English. The index covers theorems and the rules that Isabelle derives from datatype, inductive and function definitions, and also constants, types, classes, locales, proof methods and named theorems: 1&#8239;362&#8239;163 entities in total.</div>
+          <div style="font-size: 14px; line-height: 1.6; color: #5f5d57; text-align: justify">Search Isabelle/HOL and the Archive of Formal Proofs by describing what you want in English. The index covers theorems and the rules that Isabelle derives from datatype, inductive and function definitions, and also constants, types, classes, locales, proof methods and named theorems: 1&#8239;362&#8239;163 entities in total.</div>
         </div>
         <label for="q-landing" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #8a877f">Describe what you are looking for</label>
         <div style="display: flex; border: 1px solid #b3afa6; background: #ffffff">
           <input id="q-landing" value="{{ landingQuery }}" onChange="{{ onLandingQuery }}" placeholder="theorems about continuity of paths" style="flex: 1; border: 0; outline: none; padding: 18px 20px; font-size: 19px; background: transparent" />
           <button style="border: 0; border-left: 1px solid #e5e3de; background: #1b1b19; color: #faf9f7; padding: 0 30px; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: oklch(0.35 0.06 250)">Search</button>
         </div>
-        <div style="font-size: 12.5px; color: #75736c; line-height: 1.6; text-wrap: pretty">A query is required, and it ranks the results. The syntactic filters are optional, and they decide which results can appear at all. A query cannot narrow the results, and the filters cannot rank them.<br /><br /><strong style="font-weight: 500; color: #5f5d57">Looking for a name that you only partly remember?</strong> Type it into the search box and add it to an Entity Name condition as well. The condition keeps only the entities whose names contain what you typed, as whole parts; the query decides their order.</div>
+        <div style="font-size: 12.5px; color: #75736c; line-height: 1.6; text-align: justify">A query is required, and it ranks the results. The filters are optional, and they decide which results can appear at all. A query cannot narrow the results, and the filters cannot rank them.<br /><br /><strong style="font-weight: 500; color: #5f5d57">Looking for a name that you only partly remember?</strong> Type it into the search box and add it to an Entity Name condition as well. The condition keeps only the entities whose names contain what you typed, as whole parts; the query decides their order.</div>
 
         <div style="margin-top: 16px; border: 1px solid #d9d6cf; background: #f4f2ee">
           <div style="display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid #e5e3de">
@@ -172,7 +172,7 @@
               <span style="font-size: 12px; color: #75736c; line-height: 1.65">Additionally uses the BM25 word-matching algorithm to improve the results. Clear it if you want a pure semantic search.</span>
             </label>
           </div>
-          <div style="padding: 0 14px 13px; font-size: 12px; color: #75736c; line-height: 1.65; max-width: 78ch; text-wrap: pretty">
+          <div style="padding: 0 14px 13px; font-size: 12px; color: #75736c; line-height: 1.65; text-align: justify">
             Type the symbols directly, or type Isabelle&rsquo;s ASCII forms &mdash; <code>\&lt;&hellip;&gt;</code> is understood for every symbol Isabelle draws as a character, and an unambiguous abbreviation is replaced in the box while you type: <span style="font-family: 'DejaVu Sans Mono','IBM Plex Mono',monospace; font-size: 12px; background: #ffffff; border: 1px solid #e0ddd6; padding: 1px 5px">\&lt;Longrightarrow&gt;</span> and the abbreviation <span style="font-family: 'DejaVu Sans Mono','IBM Plex Mono',monospace; font-size: 12px; background: #ffffff; border: 1px solid #e0ddd6; padding: 1px 5px">==&gt;</span> both become <span style="font-family: 'DejaVu Sans Mono','JuliaMono','IBM Plex Mono',monospace; font-size: 13px">&#10233;</span>; <span style="font-family: 'DejaVu Sans Mono','IBM Plex Mono',monospace; font-size: 12px; background: #ffffff; border: 1px solid #e0ddd6; padding: 1px 5px">\&lt;^sub&gt;M</span> becomes <span style="font-family: 'DejaVu Sans Mono','JuliaMono','IBM Plex Mono',monospace; font-size: 13px">&#8681;M</span>.
           </div>
         </div>

@@ -111,7 +111,7 @@ Placeholder inside the search box:
 Under the search box, two lines:
 
 > A query is required. It puts the results in order, and only the first «200»
-> appear. The syntactic filters are optional: they decide which entities are
+> appear. The filters are optional: they decide which entities are
 > eligible to be ordered at all. The filters do not affect the order.
 
 > **Do you remember only part of a name?** Type the part you remember into the
@@ -247,9 +247,11 @@ user-ruled: readers do not expect an empty filter to return nothing.
 
 Hover on **Named theorems**: *"A `named_theorems` declaration, such as
 `approximation_preproc`."*
-Hover on **Introduction rule**: *"A theorem that is also an introduction rule is a
-single entity with both kind labels, shown on one result card. Select only this
-button to find the entities that have this label."*
+*(Introduction rule carried a hover through draft 4 — "A theorem that is also an
+introduction rule is a single entity with both kind labels, shown on one result
+card…" — deleted 2026-08-25 with D38's withdrawn clause: a card's badges are the
+kinds that reached the results, so "both labels on one card" is not promised. The
+user chose no hover over a reworded one.)*
 Hover on **Case split**: *"A case rule: one case for each constructor of a
 datatype, or for each introduction rule of an inductive definition. A rule whose
 name ends in `.split`, such as `option.split`, has the kind Theorem here."*
@@ -547,7 +549,7 @@ genuine backend failure is §6's territory, which already covers it.
 
 ### 5.7 The search box is empty
 
-> Enter a query. The syntactic filters do nothing but narrow the results; they
+> Enter a query. The filters do nothing but narrow the results; they
 > cannot search by themselves.
 
 ## 6. While searching, and when it fails

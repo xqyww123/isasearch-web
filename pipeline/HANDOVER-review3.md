@@ -444,3 +444,170 @@ there), edge caching for the pages, the CoreC++ '+' round-trip check on
 the final domain, and the user's click-through of live source_links.
 Housekeeping also now includes published.pre-basefix-20260824 (5GB,
 user may order deletion).
+
+## DEFERRED BY THE USER (2026-08-24 design session) — do not lose
+
+- theoryCaveat trigger gap: D29's amendment (kinds default NONE, empty =
+  no restriction) breaks the D15 notice's trigger in the DEFAULT state —
+  the design tests `kinds includes a theorem-alike`, false on an empty
+  selection, yet an empty selection makes theorems eligible and the
+  surprise applies.  Correct predicate: (kinds empty OR includes
+  theorem-alike) AND (a condition reaches Theory Name directly or via
+  All).  Needs: one-line design fix + a sentence in COPY.md §3.4's
+  trigger note.  User said 之后再说 — raise before the front end ships.
+
+## NEXT ACT (post-compact #2, 2026-08-24 late): BUILD THE WORKER (§12.2 step 5) — user's explicit go
+
+User ruled: compact, then start the Worker. All prerequisite rulings are
+in hand; no further approvals needed to write code. The plan's §11.1
+(rate limits), §6.3 (query construction), §6.6/D36-as-amended (fusion +
+the BM25 checkbox's two states), §8.2 (namespace naming), §9 (front end,
+still NOT to be built beyond what the Worker API needs), §17 (source
+pages, already served from R2) are the governing sections.
+
+Worker requirements digest (verify each against the plan when building):
+- Endpoints: the search API (query -> Fireworks embedding -> turbopuffer
+  multi_query -> fused 200) + serving /source/* from the R2 bucket
+  `isasearch` binding (object key = URL path minus leading /), with edge
+  caching for the pages (a page is immutable within a corpus generation).
+- Two retrieval states (D36 amendment): checkbox selected = vector leg +
+  BM25 leg over `interpretation`, server-side RRF (k=60), each leg 200,
+  fused truncated to 200; cleared = vector leg alone, top 200. Filter
+  tree attached to BOTH legs, or the single leg. Filter-first guarantee
+  (mask then top-N) — post-filtering a fetched top-N is FORBIDDEN, even
+  as a fallback.
+- Kind selection: empty = NO kind condition sent (D29 as amended).
+- D48: no relevance numbers anywhere in responses shown to users.
+- D42: empty source_link = absent form.
+- Rate limits §11.1: 5/IP/10s at the edge, 1000/IP/day in KV, global
+  bucket deferred; D28 no spend cap; log every 429 with its layer.
+- Query embedding: Fireworks Qwen3-Embedding-8B, cache by query text
+  (cost, not latency); 8000-char query cap (D29/D40 wording in COPY.md).
+- Region: everything North America (D18); Smart Placement on.
+- Acceptance item from §6.6: run one highly selective filter against the
+  real 4096-dim index and record whether ANN returns the filtered set's
+  best members (a few hundred matching docs) — pre-launch requirement.
+- Deployment needs a Cloudflare token with Workers deploy permission —
+  ASK THE USER when reaching deployment; coding needs none.
+- Worker owns isabelle-semantics.qiyuan.me (D17); domain wiring, the
+  /source/* cache rule, the CoreC++ '+' round-trip check and the user's
+  source_link click-through all land at deployment time.
+
+State at compact:
+- Work tree has UNCOMMITTED changes (user rebuked commit spam; commit
+  ONLY on the user's word, push ONLY on the user's word):
+  site/design/IsaSearch.dc.html (landing prose justified + full-width,
+  panel-foot symbols note widened+justified, "The filters are optional"
+  rename), site/COPY.md (rename in the landing line and §5.7),
+  pipeline/HANDOVER-review3.md (this file).
+- 6 local commits ahead of origin/main (through dccad41) — unpushed.
+- Design session rulings all transcribed: Filters heading (D22 amend),
+  kind default none (D29 amend), BM25 checkbox label+hover (D36 amend,
+  user's verbatim sentence), no totals/scores; the merged design carries
+  the user's pass + the 8-18 copy alignment (commits 7aefd1b/466e4ad).
+- DEFERRED (see block above): theoryCaveat trigger gap under empty-kinds
+  default — raise before the front end ships.
+- Housekeeping unanswered: push?, delete published.pre-basefix-20260824
+  (5GB)?, delete ~/heaps-AFP-ALL4/ (30GB)?
+- COPY.md standing conditional: draft 4 unread by readers; reader pass
+  owed before final approval (plan §13b).
+
+## THE WORKER IS BUILT (2026-08-24, post-compact #2 — §12.2 step 5 executed)
+
+Code at `worker/` (repo root — layout choice NOT yet confirmed by the user;
+the pre-migration §12.1 table said `site/worker/`). Files: `wrangler.toml`
+(no credential; TPUF_NAMESPACE/TPUF_REGION/FIREWORKS_MODEL as vars; R2
+binding SOURCE_BUCKET=isasearch; KV bindings RATE_KV/EMBED_KV with ids to
+fill at deployment; Smart Placement on), `src/index.js` (routing, /source/*
+off R2 + edge cache, daily KV gate, search handler), `src/search.js` (pure:
+validation, §6.3 compilation, both retrieval states' turbopuffer bodies,
+D5 collapse, D26 marking), `src/kinds.js` (11 stored kinds; {kinds} phrase
+port of render_kinds; the exact embedding input text), `src/embed.js`
+(Fireworks + KV cache keyed on SHA-256 of the exact sent text),
+`test/search.test.mjs` (12 green: `node --test worker/test`),
+`probe/live_probe.mjs` (8/8 PASS live 2026-08-24), `worker/README.md`
+(API shape + deployment list). Repo README updated; .gitignore covers
+.dev.vars/node_modules/.wrangler. ALL UNCOMMITTED (commit/push only on the
+user's word).
+
+Verified live (dev key, read-only): Fireworks embedding 4096-dim through
+the library's instruction template ("Instruct: Given a natural-language
+description, retrieve the most relevant Isabelle/HOL {kinds}\nQuery: …" —
+the {kinds} phrase varies with the kind selection, so the embed cache keys
+on the full sent text, which subsumes "by query text"); fused multi_query
+accepted (fused rows sit at results[0].rows, single-leg at rows — measured);
+root-level limit caps at 200; filters ride both legs (0 leakage on
+excludes(all)); ~0.06%-selective kind filter still fills 200; 200 rows →
+180 cards (D5); end-to-end under `wrangler dev --local`: top card for the
+sorted-list query is List_Ins_Del.sorted_snoc_iff with source_link
+/source/HOL-Data_Structures.List_Ins_Del.html#L15; error codes
+query_missing/condition_empty(+index)/kind_unknown/daily_limit all
+exercised; /source/HOL.List.html served from local R2 with correct
+content-type/cache headers. compatibility_date pinned 2026-05-03 (local
+workerd ceiling; nothing newer needed).
+
+Measured and transcribed into §6.6: turbopuffer bills a multi_query ONCE
+PER LEG (23,971,467,722 billable bytes on a two-leg query ≈ 2× namespace).
+
+RAISE WITH THE USER (found while building, not fixed silently):
+1. worker/ vs site/worker/ placement — confirm or order the move.
+2. D38's sentence "the export additionally stores, on every record, the
+   full set of kinds its group appears under" is NOT in the shipped schema
+   (§6.1/site_export.py have only the single `kind`). A card's kind badges
+   therefore union only the rows that reached the 200 — exactly the
+   variance D38 said the stored set would prevent. Options: patch a
+   `kinds` column later (patch_rows, like source_link) or amend D38.
+3. Embed-cache TTL 30 days and MAX_CONDITIONS=64 body bound are the
+   author's numbers, not ruled.
+
+DEPLOYMENT (needs the user): a Cloudflare token with Workers deploy
+permission; then wrangler kv namespace create ×2 (fill ids), the three
+`wrangler secret put` (turbopuffer READ-ONLY key — must be issued;
+dev key never deploys), custom domain isabelle-semantics.qiyuan.me (D17),
+the edge rate rule 5/IP/10s (§11.1 layer 1), the /source/* cache rule,
+CoreC++ '+' URL check, the user's source_link click-through.
+
+## WORKER REVIEW ROUND CLOSED (2026-08-25) — all rulings applied, code reworked
+
+2-turn adversarial review (two Opus reviewers, correctness + elegance):
+7 findings refuted, 13 should-fix + nits applied, 6 rulings taken by the user.
+
+Rulings (all transcribed into the plan / COPY.md):
+- worker/ at repo root (§12.1 note).
+- R1 = (b): D38's stored group-kind union WITHDRAWN (struck in D38, noted in
+  D5); Introduction rule button hover DELETED (COPY §3.6 note). No `kinds`
+  column, no patch.
+- R3: "normalised query" = NFC + trim + inner whitespace folded (§11.1).
+- R4: asset sentinel BUILT as companion namespace `<ns>.asset` (every tpuf
+  row must carry a vector — measured — so not a row in the data ns). Written
+  for the live ns: isasearch-2025-2-afp-2026-05-13.asset, digest 9fadd5c55bc9…
+  = sha256(site/tokenizer/asset.json). Export writes it after a full run;
+  `--asset-sentinel-only --namespace` for old namespaces. Retire with its ns.
+- R5 = (a): layer 2 in ONE Durable Object `DailyGate` (SQLite): counters(day,
+  ip_hash, count, country, asn) + daily(day, searches, rejected, addresses);
+  ip_hash = sha256(FIXED salt | ip); asn stored, as_org not; usage stats are a
+  new ruled purpose. KV RATE_KV binding removed; EMBED_KV stays.
+- R6: D26 exception KEPT; C1 fixed (All panel counts; theoryParts from
+  compileRequest).
+- Smart Placement governs /source/* — accepted, recorded under D18.
+- Layer 1 edge rule scoped to /api/search (§11.1, README).
+
+Code state (worker/): kinds.js one table + canonicalKinds (dedupe, fixed order,
+all-eleven ≡ none); search.js normalizeQuery, bm25 boolean-validated, always a
+multi_query (one-leg without rerank_by for semantic-only — measured 2026-08-25
+identical rows, billed one leg), rerank_by ['RRF',{rank_constant:60}], rowsOf
+requires exactly one results entry, collapse uniform '' defaults; embed.js put
+via ctx.waitUntil; index.js no decodeURIComponent, body bound by arrayBuffer
+byteLength, HEAD derived from a canonical GET cache key + Content-Length,
+CONTENT_TYPES = html/css/ttf/json, sentinel check once per instance, DO gate
+with cf.country/cf.asn, 429 log carries ipHash; gate.js the DO; wrangler.toml
+Text rule for asset.json, DO binding + migration v1.
+Verified: 19/19 unit tests; probe 9/9 live; wrangler dev end-to-end (All-panel
+marking, kinds order, chunked 300KB → 413, %ZZ → 404, HEAD body 0 +
+Content-Length, gate: exactly 1000 allowed then 429 w/ Retry-After, daily row
+2026-08-25|1000|8|1; sentinel refusal → 502 with logged reason). Python 128 green.
+Local state and .dev.vars removed after each run.
+
+Still UNCOMMITTED, push only on the user's word. Deployment list unchanged
+(Workers token from the user; READ-ONLY tpuf key; EMBED_KV id; domain; edge
+rule scoped; cache rule; click-through).
