@@ -10,7 +10,11 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; background: #faf9f7; color: #1b1b19; font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+/* The footer never floats above the bottom of the window: the page is at least
+   one viewport tall and `main` takes whatever is left, so a short page puts the
+   footer on the bottom edge and a long one pushes it out of sight. */
+body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: #faf9f7; color: #1b1b19; font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+main { flex: 1 0 auto; }
 a { color: oklch(0.5 0.09 250); text-decoration: none; border-bottom: 1px solid oklch(0.5 0.09 250 / 0.3); }
 a:hover { color: oklch(0.42 0.11 250); border-bottom-color: oklch(0.42 0.11 250 / 0.6); }
 input, button, textarea { font: inherit; color: inherit; }
