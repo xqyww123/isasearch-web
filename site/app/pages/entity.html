@@ -37,15 +37,18 @@
   </aside>
 </div>
 <script type="module">
-  // §4.1's copy control, on the entity page too.
+  // §4.1's copy control, on the entity page too.  The strings come from the one
+  // table every other screen reads (a copy of them lived here until 2026-08-25,
+  // and a string deleted from the table went on being served from this file).
+  import { COPY } from '/render.js';
   const button = document.getElementById('copy');
   const expr = document.getElementById('expr').textContent;
   button.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(expr);
-      button.textContent = 'Copied';
+      button.textContent = COPY.copied;
     } catch {
-      button.textContent = 'Could not copy. Select the expression and copy it yourself.';
+      button.textContent = COPY.copyFailed;
     }
     setTimeout(() => { button.textContent = 'copy'; }, 2000);
   });
