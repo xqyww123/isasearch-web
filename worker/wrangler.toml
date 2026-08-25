@@ -24,6 +24,7 @@ fallthrough = true
 # hot path at the visitor's edge; a cold page pays one round trip).
 [placement]
 mode = "smart"
+hint = "wnam"
 
 [vars]
 # §8.2: the namespace name is the Worker's only pointer at the data — switching

@@ -89,8 +89,11 @@ is the same Worker). Done with the first deployment, all verified live:
   `CLOUDFLARE_API_TOKEN` (the least-privilege `isasearch-deploy` token) in
   the environment; the zone wiring is a one-off already applied.
 
-Still owed: the user's own click-through of a few live source links; a
-latency reading once Smart Placement has settled (the first hours measured
-1.4–2.5 s per search from Singapore). Usage statistics live in the
+The user's click-through of live source links passed 2026-08-25. Smart
+Placement alone left the Worker executing at the visitor's edge for hours
+(`cf-placement: local-SIN`, 1.8–3.4 s per search from Singapore); the
+`hint = "wnam"` in `wrangler.toml` moved it within a minute of deploying
+(`remote-LAX`, 1.0–1.7 s). The `DailyGate` object is created under the same
+region hint (D18). Usage statistics live in the
 `DailyGate` object's `daily` table (`stats()`); no endpoint exposes them
 yet — add an authenticated route when wanted.
