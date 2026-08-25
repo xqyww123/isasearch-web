@@ -16,6 +16,7 @@ compatibility_date = "2026-05-03"
 [[rules]]
 type = "Text"
 globs = ["**/asset.json"]
+fallthrough = true
 
 # D18: everything North America.  Smart Placement puts the Worker next to
 # Fireworks and turbopuffer instead of next to the visitor; it governs the
@@ -36,11 +37,10 @@ FIREWORKS_MODEL = "fireworks/qwen3-embedding-8b"
 binding = "SOURCE_BUCKET"
 bucket_name = "isasearch"
 
-# The query-embedding cache (§11.1).  Created at deployment
-# (`wrangler kv namespace create EMBED_KV`); fill the id then.
+# The query-embedding cache (§11.1); created 2026-08-25.
 [[kv_namespaces]]
 binding = "EMBED_KV"
-id = "FILL-AT-DEPLOYMENT"
+id = "47c37534752041cd991b3491501d6db3"
 
 # §11.1 layer 2: the per-address daily counter and the usage statistics, one
 # Durable Object for the whole site (ruled 2026-08-25).

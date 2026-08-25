@@ -207,7 +207,12 @@ async function dailyGate(request, env) {
   const ipHash = (await sha256hex(`${env.IP_HASH_SALT}|${ip}`)).slice(0, 32);
   const now = new Date();
   const day = now.toISOString().slice(0, 10);
-  const gate = env.DAILY_GATE.get(env.DAILY_GATE.idFromName('site'));
+  // D18: the object's home is fixed by its first access, so it is created
+  // under a North-America hint rather than wherever the first visitor was.
+  // The name carries the region so that a wrongly-homed object cannot be
+  // reused by accident (the first `site` object was homed in Singapore).
+  const gate = env.DAILY_GATE.get(env.DAILY_GATE.idFromName('site-wnam'),
+                                  { locationHint: 'wnam' });
   const { allowed } = await gate.admit({
     day, ipHash, country: request.cf?.country, asn: request.cf?.asn });
   if (allowed) return null;

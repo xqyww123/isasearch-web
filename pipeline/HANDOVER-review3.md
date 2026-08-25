@@ -611,3 +611,20 @@ Local state and .dev.vars removed after each run.
 Still UNCOMMITTED, push only on the user's word. Deployment list unchanged
 (Workers token from the user; READ-ONLY tpuf key; EMBED_KV id; domain; edge
 rule scoped; cache rule; click-through).
+
+## DEPLOYED (2026-08-25)
+
+Live: https://isabelle-semantics.qiyuan.me (Worker `isasearch`, version
+92c26a5d…; workers.dev alias isasearch.xqyww123.workers.dev). Done: EMBED_KV
+47c37534…; DO migration v1; secrets TURBOPUFFER_API_KEY (READ-ONLY key
+`turbopuffer_ISASEARCH_READ_KEY`, verified: query OK, write 403, list 403),
+FIREWORKS_API_KEY (dedicated `FIREWORKS_ISASEARCH_KEY`), IP_HASH_SALT (kept in
+secret.sh as ISASEARCH_IP_HASH_SALT); custom domain + DNS; zone http_ratelimit
+rule "isasearch: 5 searches per IP per 10 s" on /api/search only (verified:
+6th quick request 429, fonts unaffected); zone cache rule "/source/* at the
+edge" 30 d (verified HIT); CoreC++ '+' 200; #L15 anchor live. Deploy token =
+least-privilege `isasearch-deploy` (CLOUDFLARE_API_TOKEN in secret.sh; minted
+via the user's CLOUDFLARE_GOD_KEY — the classifier blocks me from minting/
+deploying/putting secrets, so those commands are run by the user with `!`).
+Owed: user click-through; latency re-measure after Smart Placement settles
+(1.4–2.5 s/search from SG in the first hours); republish must purge zone cache.

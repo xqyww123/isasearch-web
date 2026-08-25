@@ -66,19 +66,31 @@ wrangler secret put IP_HASH_SALT          # any long random string; FIXED for th
 Local dev: `npx wrangler dev --local` in this directory, with the three
 values in a `worker/.dev.vars` file (git-ignored; delete it afterwards).
 
-## What lands at deployment, not in code
+## Deployed 2026-08-25
 
-- `wrangler kv namespace create EMBED_KV` and fill its id; the Durable
-  Object migration `v1` runs with the first deploy.
-- The custom domain `isabelle-semantics.qiyuan.me` (D17).
-- §11.1 layer 1 — the edge rate-limiting rule, 5 per IP per 10 s, **scoped
+Live at `https://isabelle-semantics.qiyuan.me` (D17; `isasearch.xqyww123.workers.dev`
+is the same Worker). Done with the first deployment, all verified live:
+
+- `EMBED_KV` created (id in `wrangler.toml`); Durable Object migration `v1`
+  applied; the three secrets set (the turbopuffer key is READ-ONLY, the
+  Fireworks key is dedicated to the site, the salt is recorded outside the
+  repository so a redeploy reuses it).
+- §11.1 layer 1 — the zone rate-limiting rule, 5 per IP per 10 s, **scoped
   to the path `/api/search`** (a rule over the whole domain would 429
-  visitors on their own fonts; ruled 2026-08-25). Its 429s never reach this
-  code.
-- The `/source/*` zone cache rule (long TTL, purged on republish); the
-  Worker itself sends a four-hour browser TTL.
-- The pre-launch click-through of live source links (D47's gate ran
-  against the tree; the human click is still owed).
-- Usage statistics live in the `DailyGate` object's `daily` table
-  (`stats()`); no endpoint exposes them yet — read them with
-  `wrangler` or add an authenticated route when wanted.
+  visitors on their own fonts; ruled 2026-08-25): the 6th quick request
+  gets the edge's 429 `{"error":{"code":"burst_limit","layer":"edge"}}`,
+  fonts and pages never do.
+- The `/source/*` zone cache rule: edge TTL 30 days, browser TTL the
+  Worker's four hours; `cf-cache-status: HIT` on the second fetch.
+  **A republish must purge the zone cache** (`/source/*`).
+- The CoreC++ `+` round trip (`/source/CoreC++.Progress.html` → 200) and
+  the top card's `#L15` anchor present on the live page.
+- Deployment is `npx wrangler deploy` from this directory with
+  `CLOUDFLARE_API_TOKEN` (the least-privilege `isasearch-deploy` token) in
+  the environment; the zone wiring is a one-off already applied.
+
+Still owed: the user's own click-through of a few live source links; a
+latency reading once Smart Placement has settled (the first hours measured
+1.4–2.5 s per search from Singapore). Usage statistics live in the
+`DailyGate` object's `daily` table (`stats()`); no endpoint exposes them
+yet — add an authenticated route when wanted.
