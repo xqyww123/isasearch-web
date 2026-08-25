@@ -1,0 +1,52 @@
+<!-- The entity page (COPY §8, mockup 05).  Filled by the Worker (pages.js). -->
+<div class="entity">
+  <div class="entity-main">
+    <div class="entity-head">
+      <h1>{{name}}</h1>
+      <div class="entity-kinds">{{kind}}</div>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <span class="section-label">Statement</span>
+        <button type="button" class="small-button" id="copy" title="Copy the expression">copy</button>
+      </div>
+      <pre class="expr" id="expr">{{expr}}</pre>
+    </div>
+
+    <div class="section">
+      <span class="section-label">In English</span>
+      {{explanation}}
+    </div>
+
+    <div class="section">
+      <span class="section-label">Associated theories</span>
+      {{theories}}
+    </div>
+
+    <div class="section">
+      <span class="section-label">Source</span>
+      <div class="source-box">{{source}}</div>
+    </div>
+  </div>
+
+  <aside class="entity-aside">
+    <span class="section-label">Nearest entities</span>
+    <span class="section-note">The ten entities closest to this one, compared with each other by the same measure that compares a query with an entity on the result cards. There is no query here, so keyword matching is not used.</span>
+    <div class="nearest">{{nearest}}</div>
+  </aside>
+</div>
+<script type="module">
+  // §4.1's copy control, on the entity page too.
+  const button = document.getElementById('copy');
+  const expr = document.getElementById('expr').textContent;
+  button.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(expr);
+      button.textContent = 'Copied';
+    } catch {
+      button.textContent = 'Could not copy. Select the expression and copy it yourself.';
+    }
+    setTimeout(() => { button.textContent = 'copy'; }, 2000);
+  });
+</script>

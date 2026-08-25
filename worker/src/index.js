@@ -12,6 +12,8 @@ import { compileRequest, tupfQueryBody, rowsOf, collapse, matchedTheories,
          RESULT_LIMIT, SearchError } from './search.js';
 import { embedQuery } from './embed.js';
 import { DailyGate } from './gate.js';
+import { documentIdOf, keyBytesOf } from './blake2b.js';
+import { searchPage, aboutPageOf, entityPageOf, missingPage } from './pages.js';
 
 export { DailyGate };
 
@@ -25,6 +27,13 @@ const json = (status, body, headers = {}) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json; charset=utf-8', ...headers },
+  });
+
+const html = (body, status = 200, cacheSeconds = 3600) =>
+  new Response(body, {
+    status,
+    headers: { 'Content-Type': 'text/html; charset=utf-8',
+               'Cache-Control': `public, max-age=${cacheSeconds}` },
   });
 
 export default {
@@ -42,7 +51,20 @@ export default {
       }
       return search(request, env, ctx);
     }
-    return json(404, { error: { code: 'not_found' } });
+    // The pages (§9.5).  Static files — /style.css, /app.js, /render.js,
+    // /abbrevs.json — are served by the assets binding before this runs.
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      return json(405, { error: { code: 'method_not_allowed' } });
+    }
+    if (url.pathname.startsWith('/entity/')) return entity(request, url, env, ctx);
+    const render = url.pathname === '/' ? searchPage : url.pathname === '/about' ? aboutPageOf : null;
+    if (!render) return json(404, { error: { code: 'not_found' } });
+    try {
+      return html(render(await siteOf(env)));
+    } catch (e) {
+      console.log(JSON.stringify({ event: 'upstream_error', message: String(e) }));
+      return json(502, { error: { code: 'upstream' } });
+    }
   },
 };
 
@@ -174,6 +196,15 @@ const tupfQuery = (body, env) => tupfPost(env.TPUF_NAMESPACE, body, env);
 
 let assetCheck = null;
 
+/** What every page prints: the sentinel row's entity count and build date,
+ * and the release and snapshot the namespace name carries (§8.2's shape,
+ * `isasearch-<release>-<snapshot>`). */
+async function siteOf(env) {
+  const { entities, built } = await assertAssetMatches(env);
+  const m = /^isasearch-(.+)-afp-(\d{4}-\d{2}-\d{2})/.exec(env.TPUF_NAMESPACE) ?? [];
+  return { entities, built, release: m[1] ?? '', snapshot: m[2] ?? '' };
+}
+
 async function sha256hex(text) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -183,7 +214,7 @@ function assertAssetMatches(env) {
   assetCheck ??= (async () => {
     const own = await sha256hex(assetText);
     const rows = (await tupfPost(`${env.TPUF_NAMESPACE}.asset`, {
-      rank_by: ['id', 'asc'], top_k: 1, include_attributes: ['digest'],
+      rank_by: ['id', 'asc'], top_k: 1, include_attributes: true,
     }, env)).rows;
     const recorded = rows?.[0]?.digest;
     if (recorded !== own) {
@@ -191,6 +222,7 @@ function assertAssetMatches(env) {
         `asset digest mismatch: the index was built under ${recorded ?? 'no recorded '
         }digest, this Worker carries ${own}`);
     }
+    return { entities: rows[0].entities ?? 0, built: rows[0].built ?? '' };
   })().catch((e) => { assetCheck = null; throw e; });
   return assetCheck;
 }
@@ -227,4 +259,54 @@ function secondsToUtcMidnight(now) {
   const midnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(),
                             now.getUTCDate() + 1);
   return Math.max(1, Math.ceil((midnight - now.getTime()) / 1000));
+}
+
+// ---------------------------------------------------------------------------
+// /entity/<universal key, base64url> — one page per record (D9 as amended
+// 2026-08-25).  The key becomes the document id (§6.2) and the row is fetched
+// by primary key; the ten nearest come from the row's own vector (§9.4).
+// Cached like /source/*: a page is immutable within a namespace.
+// ---------------------------------------------------------------------------
+
+const ENTITY_ATTRIBUTES = [
+  'key', 'name', 'expr', 'theories', 'kind', 'position', 'source_link',
+  'from_collection', 'interpretation',
+];
+
+async function entity(request, url, env, ctx) {
+  const cache = caches.default;
+  const cacheKey = new Request(url.toString(), { method: 'GET' });
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached;
+
+  let id;
+  try {
+    const bytes = keyBytesOf(url.pathname.slice('/entity/'.length));
+    if (bytes.length < 17 || bytes.length > 512) throw new Error('key length');
+    id = documentIdOf(bytes);
+  } catch {
+    return json(404, { error: { code: 'not_found' } });
+  }
+  let site, row, nearest;
+  try {
+    site = await siteOf(env);
+    row = (await tupfQuery({
+      rank_by: ['id', 'asc'], top_k: 1, filters: ['id', 'Eq', id],
+      include_attributes: [...ENTITY_ATTRIBUTES, 'vector'],
+    }, env)).rows?.[0];
+    if (row) {
+      nearest = rowsOf(await tupfQuery({ queries: [{
+        rank_by: ['vector', 'ANN', row.vector], top_k: 12,
+        filters: ['id', 'NotEq', id], include_attributes: ENTITY_ATTRIBUTES,
+      }] }, env));
+    }
+  } catch (e) {
+    console.log(JSON.stringify({ event: 'upstream_error', message: String(e) }));
+    return json(502, { error: { code: 'upstream' } });
+  }
+  if (!row) return html(missingPage(site), 404, 300);
+  const [card] = collapse([row]);
+  const response = html(entityPageOf(card, collapse(nearest).slice(0, 10), site), 200, 14400);
+  ctx.waitUntil(cache.put(cacheKey, response.clone()));
+  return response;
 }

@@ -72,7 +72,7 @@ check(Array.isArray(hybrid.rows), 'multi_query body accepted (rows came back)');
 check(hybrid.rows.length === RESULT_LIMIT,
       `fused list is capped at root-level limit`, `${hybrid.rows.length} rows`);
 const first = hybrid.rows[0] ?? {};
-check(typeof first.group === 'string' && typeof first.kind === 'string'
+check(typeof first.key === 'string' && typeof first.kind === 'string'
       && typeof first.expr === 'string' && 'source_link' in first,
       'include_attributes honoured on the fused rows');
 const sortedEverywhere = hybrid.rows.every((r) =>

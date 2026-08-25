@@ -1,0 +1,38 @@
+<!-- COPY.md §14, approved 2026-08-25.  Slots: entities, built. -->
+<div class="about">
+  <h1>About Isasearch</h1>
+
+  <div class="section">
+    <span class="section-label">What is indexed</span>
+    <p>Isasearch covers the Isabelle release {{release}} and the Archive of Formal Proofs snapshot of {{snapshot}}, and nothing outside them. The index covers theorems, together with the rules that Isabelle derives from <code>datatype</code>, <code>inductive</code> and <code>function</code> definitions. It also covers constants, types, classes, locales, proof methods and named theorems. In total it holds {{entities}} entities. The index was built on {{built}}.</p>
+    <p>An entity has one of 11 kinds: Theorem, Named theorems, Constant, Type, Class, Locale, Proof method, Introduction rule, Elimination rule, Induction rule and Case split. <strong>Named theorems</strong> is a <code>named_theorems</code> declaration, such as <code>approximation_preproc</code>. <strong>Case split</strong> is a case rule: one case for each constructor of a datatype, or for each introduction rule of an inductive definition. A rule whose name ends in <code>.split</code>, such as <code>option.split</code>, has the kind Theorem here.</p>
+  </div>
+
+  <div class="section">
+    <span class="section-label">How a search works</span>
+    <p>A query is required. It puts the results in order, and only the first 200 appear. The filters are optional: they decide which entities are eligible to be ordered at all. The filters do not affect the order.</p>
+    <p>With the BM25 checkbox selected, the semantic-similarity results (from the embedding model) and the BM25 word-matching results are combined with reciprocal rank fusion (RRF). Cleared, only semantic similarity is used. Isasearch ranks every entity that satisfies your conditions and returns the best 200.</p>
+  </div>
+
+  <div class="section">
+    <span class="section-label">How a condition is matched</span>
+    <p>Isasearch cuts a name into parts at <code>_</code>, <code>.</code>, the question mark, and the subscript and superscript marks. Those five are separators: they are thrown away and cannot be matched. Every other character that is not a letter or a digit &mdash; an operator or a bracket, such as <code>+</code> or <code>&#10214;</code> &mdash; is a part on its own and can be matched. A condition matches when its parts appear as whole parts, in the order you typed them, with nothing between them. So <code>sorted</code> matches <code>sorted_wrt</code> and <code>image_join</code> matches <code>Path_Connected.path_image_join</code>; <code>sort</code> matches neither, because Isasearch matches only whole parts and never a fragment of one. Upper and lower case are different: <code>Path</code> and <code>path</code> do not match each other. Spacing is ignored &mdash; <code>x + y</code> and <code>x+y</code> are the same condition.</p>
+    <p>A result must satisfy every condition. <code>excludes</code> reverses one condition: the result must not contain that text. Kind selections are not conditions and behave in the opposite way &mdash; a result appears if its kind is one of the kinds you select. A condition matches text, not patterns. It has no variables: <code>?n</code> searches for the name <code>n</code>. To search by the structure of a term, use Isabelle: <code>find_theorems</code> and <code>find_consts</code> search structurally inside a session.</p>
+  </div>
+
+  <div class="section">
+    <span class="section-label">About the explanations</span>
+    <p>Every entity carries an English explanation. It is written by a language model from the formal statement, not by the theory's authors. It may be imprecise or wrong. Where the explanation and the statement disagree, the statement is the correct one. Isasearch searches this text as well, so an entity with a poor explanation may rank lower than it deserves.</p>
+  </div>
+
+  <div class="section">
+    <span class="section-label">Limits and what is recorded</span>
+    <p>Each network address may make 1&#8239;000 searches per UTC day, and 5 within any 10 seconds. One search is one press of the search button: turning a page of results does not count, and editing a condition costs nothing until you search again.</p>
+    <p>To count searches, Isasearch keeps a salted hash of your network address for the current day and the day before, together with the country and the network it belongs to. The address itself is not stored, and the query text is not stored with it.</p>
+  </div>
+
+  <div class="section">
+    <span class="section-label">Authors</span>
+    <p>Isasearch is made by <a href="https://qiyuan.me">Qiyuan Xu</a>, with <a href="https://claude.com/claude-code">Claude Code</a>. The source is on <a href="https://github.com/xqyww123/isasearch-web">GitHub</a>.</p>
+  </div>
+</div>

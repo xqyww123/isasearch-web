@@ -1,4 +1,4 @@
-# Interface copy — isasearch
+# Interface copy — Isasearch
 
 Draft 4, 2026-08-19. Every visitor-facing string, in one place, so that the
 implementation copies rather than invents.
@@ -20,7 +20,7 @@ Draft 2 stated this rule four times in three incompatible ways, and both
 reviewers independently made it their top finding. It is stated **here**, and
 every place in the interface that needs it uses this wording without variation.
 
-isasearch divides a name into **parts**. The dividers are `_`, `.`, the question
+Isasearch divides a name into **parts**. The dividers are `_`, `.`, the question
 mark, and the subscript and superscript marks; a divider is thrown away and can
 never be matched itself. Every **other** character that is not a letter or a digit —
 a hyphen, a bracket, an operator — is a part on its own and can be matched. A
@@ -77,7 +77,7 @@ Absent by decision: **literally**; **run** as a noun; **allowance**; **resets**;
 *display*; **at once** in the sense of *simultaneously*.
 
 Numbers of four digits or more are grouped with a **non-breaking thin space** —
-`1 000`, `8 000`, `1 362 163`. A comma is a decimal point across most of
+`1 000`, `8 000`, `1 230 467`. A comma is a decimal point across most of
 continental Europe, and draft 2 mixed bare `1000` with spaced `1 300 000`. Digits
 throughout, never words: `11 kinds`, not "eleven kinds".
 
@@ -89,19 +89,21 @@ were settled by the user on 2026-08-14; §11 records them.
 The whole page is the search box, with the Filters panel group
 collapsed beneath it.
 
-> **isasearch**
+> **Isasearch**
 >
 > Search Isabelle/HOL and the Archive of Formal Proofs by describing what you
 > want in English. The index covers theorems, together with the rules that Isabelle
 > derives from `datatype`, `inductive` and `function` definitions. It also covers
 > constants, types, classes, locales, proof methods and named theorems. In total it
-> holds «1 362 163» entities.
+> holds «1 230 467» entities.
 
 The count is a substitution slot, filled by the export and matching the footer's
-build date. It is exact, not rounded: measured on `cslh19` on 2026-08-19, the
-authoritative store holds 1 343 793 entity records, of which 1 337 025 are
-exportable — the difference being the 6 768 `EXPERIENCE` records, which are never
-published. A search tool may not be vague about how much it covers, because the
+build date: the export writes both into the asset sentinel row, and the Worker
+reads them there (ruled 2026-08-25). It is exact, not rounded, and it counts
+**entities under the user's golden standard of 2026-08-25** (plan D5 as
+amended): theorem-alike records whose universal keys differ only in the kind
+tag are one entity. The live index holds 1 337 009 records and 1 230 467
+entities. A search tool may not be vague about how much it covers, because the
 absence of a result is its main output.
 
 Placeholder inside the search box:
@@ -192,7 +194,9 @@ condition reads:
 selection includes Theorem or a derived rule **and** the Theory Name panel carries a
 condition — not merely when the panel is open. The same two conditions govern it
 under the All panel, since an All condition reaches Theory Name and so carries the
-same surprise. A note that is always on screen is a note nobody reads; this one
+same surprise. An empty kind selection restricts nothing (§3.6), so it counts as
+including Theorem: the note appears under the default selection too (ruled
+2026-08-25). A note that is always on screen is a note nobody reads; this one
 appears exactly when it applies.
 
 > **Theory Name conditions work differently on theorems.** A Theory Name condition
@@ -209,7 +213,7 @@ appears exactly when it applies.
 > condition also matches any entity whose name mentions `Path_Connected` anywhere
 > else.
 
-*(Draft 1 said "isasearch does not record which theory declares a theorem", which
+*(Draft 1 said "Isasearch does not record which theory declares a theorem", which
 is false about Isabelle and contradicts the source link on the same card. Draft 2
 replaced it with "A theorem is identified by its statement, not by the place
 where it is written", which the Isabelle reader rejected for the same reason —
@@ -219,14 +223,20 @@ behaviour. §12.)*
 
 ### 3.5 The lines at the foot of the panel group, always shown
 
-> **How a condition is matched.** isasearch cuts a name into parts at `_`, `.`, the
+Beside them, one control (approved 2026-08-25) that removes every condition,
+clears the kind selection and returns the BM25 checkbox to its default, leaving
+the search box alone:
+
+> Clear all
+
+> **How a condition is matched.** Isasearch cuts a name into parts at `_`, `.`, the
 > question mark, and the subscript and superscript marks. Those five are separators:
 > they are thrown away and cannot be matched. Every other character that is not a
 > letter or a digit — an operator or a bracket, such as `+` or `⟦` — is a part on
 > its own and can be matched. A condition matches when its parts appear as whole
 > parts, in the order you typed them, with nothing between them. So `sorted` matches
 > `sorted_wrt` and `image_join` matches `Path_Connected.path_image_join`; `sort`
-> matches neither, because isasearch matches only whole parts and never a fragment
+> matches neither, because Isasearch matches only whole parts and never a fragment
 > of one. Upper and lower case are different: `Path` and `path` do not match each
 > other. Spacing is ignored — `x + y` and `x+y` are the same condition.
 >
@@ -285,6 +295,14 @@ If the copy fails:
 The similarity hover is gone — **D48**: no relevance number is displayed
 anywhere, so there is nothing to hover.
 
+A long expression is clipped to about four lines with a fade, under a control
+that shows it whole; shown whole, the control reads the other way (both approved
+2026-08-25; the count is a run-time value):
+
+> «612» characters — show all
+
+> collapse expression
+
 ### 4.2 The expanded explanation
 
 The first sentence is **locked by D30**. The second is D30's, amended by the user
@@ -292,7 +310,7 @@ on 2026-08-14. The third is required by D40.
 
 > Written by a language model from the formal statement, not by the theory's
 > authors. It may be imprecise or wrong. Where the explanation and the statement
-> disagree, the statement is the correct one. isasearch searches this text as
+> disagree, the statement is the correct one. Isasearch searches this text as
 > well, so an entity with a poor explanation may rank lower than it deserves.
 
 No explanation:
@@ -315,7 +333,7 @@ Hover:
 > Your condition matched this theory. It is one of the «23» theories that declare
 > the constants in this statement. The theory where the theorem was proved is
 > usually in that set too, because a statement normally uses constants from its own
-> theory — but isasearch does not mark which one it is, so a match here does not
+> theory — but Isasearch does not mark which one it is, so a match here does not
 > tell you where the theorem was proved. The entity page lists all «23».
 
 An `excludes` condition never produces this line: nothing was matched.
@@ -344,7 +362,7 @@ Absent form, in place of the link, never a dead link and never blank:
 
 Hover on the absent form:
 
-> Some commands do not report a position, so isasearch cannot provide a link.
+> Some commands do not report a position, so Isasearch cannot provide a link.
 
 ### 4.5 Under the list
 
@@ -361,7 +379,7 @@ page; the next control is absent on the last:
 
 At the end of the results, **only when the 200-match limit was reached**:
 
-> No more results. isasearch ranks every entity that satisfies your conditions
+> No more results. Isasearch ranks every entity that satisfies your conditions
 > and returns the best 200. If what you want is not among them, add a condition
 > to narrow the search.
 
@@ -375,26 +393,15 @@ total would be a number the site cannot honestly produce. Draft 2 showed the
 200-limit advice unconditionally, telling a visitor looking at 7 results to
 narrow the search.)*
 
-### 4.6 A condition matched more loosely than it looks
+### 4.6 — deleted 2026-08-25
 
-**New in draft 4, and it covers a state that had no text at all.** A condition
-containing separators is not rejected; it is reduced to the parts that survive, and
-the search then succeeds against the reduction. The reader's own report of this was
-that the site teaches "this will find nothing" while the truth is "this will find
-thousands of the wrong things, silently". Shown as a notice directly above the
-result list whenever the parts of a condition are fewer than the things the visitor
-typed:
-
-> **«Expression `_ + _`» was read as «`+`»**
->
-> `_`, `.`, the question mark and the subscript and superscript marks separate the
-> parts of a name; they are never matched themselves. The results below are for
-> what remains.
->
-> *[button]* Edit this condition
-
-If nothing at all remains, §5.6 applies instead — that condition is rejected rather
-than reduced.
+Draft 4 added here a notice above the result list — "«Expression `_ + _`» was
+read as «`+`»" — whenever a condition lost a separator. It was the author's
+response to a reader finding, never put to the user, and the user struck it on
+sight ("我并不记得我批准过这个设计，而且我觉得不应该提醒"). The reduction
+itself stands (§0: a condition that mixes separators with other characters is
+reduced, not rejected); the interface does not announce it. §5.1's reference
+block lost its sentence about the notice with it.
 
 ## 5. Empty states
 
@@ -412,7 +419,7 @@ example".
 >
 > **Your condition**
 > «?n + ?m = ?m + ?n»
-> isasearch removes the question marks — from your condition and from the text it
+> Isasearch removes the question marks — from your condition and from the text it
 > searches — and then looks for «7» parts, one directly after another, in this
 > order: «`n` `+` `m` `=` `m` `+` `n`».
 >
@@ -473,10 +480,6 @@ The reference block beneath, on both variants:
 >   - `.*` becomes `*` and matches a literal multiplication sign;
 >   - `cont*` loses nothing, but it is read as the two parts `cont` `*`, which
 >     almost nothing contains: a star is an ordinary character here, not a wildcard.
->   isasearch says so above the results **when a separator was dropped**. When
->   nothing is dropped — as with `cont*` — there is nothing to report and no notice
->   appears, so the absence of a notice does not mean your condition was taken as
->   you meant it.
 > ✗ Question marks, `_`, `.` and the subscript and superscript marks are separators
 >   and are never matched themselves. A subscripted name such as `f⇩1` is therefore
 >   found by `f`, and **not** by `f1`.
@@ -584,7 +587,7 @@ assume the worst:
 
 The whole site is above its limit (10 000 per hour):
 
-> isasearch is busy. Try again in a moment.
+> Isasearch is busy. Try again in a moment.
 
 The query is too long:
 
@@ -596,7 +599,9 @@ One condition is too long:
 
 ## 8. The entity page
 
-The heading is the entity name alone. Under it, the same content as a card,
+One page per record, at `/entity/<universal key, base64url>` (plan D9 as amended
+2026-08-25): a theorem and its introduction-rule twin are two pages, each with
+its own explanation. The heading is the entity name alone. Under it, the same content as a card,
 uncollapsed and full width, and then:
 
 > **Associated theories**
@@ -608,7 +613,7 @@ under this line:
 > These are the theories that declare the constants appearing in this statement.
 > About five times in six the theory where the theorem was proved is among them,
 > because a statement normally uses constants from its own theory; the rest of the
-> time it is absent. isasearch does not mark it either way. Its name is at the start
+> time it is absent. Isasearch does not mark it either way. Its name is at the start
 > of the entity name above, up to the first dot.
 
 Then, when a source position is recorded:
@@ -629,7 +634,9 @@ Then:
 > measure that compares a query with an entity on the result cards. There is no
 > query here, so keyword matching is not used.
 
-When the entity has no vector:
+The ten come from the record's own vector. Every published record carries one
+(measured: turbopuffer refuses a vector-less row), so the absent form below is
+kept only for a failed lookup:
 
 > Nearest entities are not available for this entity.
 
@@ -640,8 +647,15 @@ An entity page that does not exist:
 
 ## 9. The footer, on every page
 
-> isasearch · built for Isabelle release 2025-2 · AFP snapshot 2026-05-13 · index built
-> «2026-08-20» · [about] · [source]
+> Isasearch · built for Isabelle release 2025-2 · AFP snapshot 2026-05-13 · index built
+> «2026-08-20»
+
+The two links live in the page header instead, on every page (the user,
+2026-08-25: the mockup had no footer links, so its header links were kept):
+
+> about · source
+
+`about` is the page of §14; `source` is the GitHub repository.
 
 *(The build date is load-bearing: the absence of a result is this product's main
 output, and no one can interpret it without knowing what was indexed. §15.2 of
@@ -649,6 +663,13 @@ the plan. "version" rather than "release" because `2025-2` sits between two ISO
 dates and otherwise reads as February 2025.)*
 
 ## 10. Deliberately unwritten
+
+- **The address of a search.** A search puts its query into the address,
+  `/?q=…`, and opening such an address runs the search, so the address bar is
+  the share link (ruled 2026-08-25; the embedding of a shared query is served
+  from the Worker's 30-day cache, so a shared link costs one embedding, not one
+  per visitor). Conditions and kinds are not in the address. The interface says
+  nothing about it.
 
 - **Whether the filters persist between visits.** They do not. Saying so on a page
   a visitor reads twenty times a day costs a line and helps no one.
@@ -758,3 +779,87 @@ copying a theory off a card into Entity Name would otherwise match nothing.
 D39 was first written with `HOL-Analysis.Path_Connected.path_image_join` as its
 worked example, which is not a name that exists; it has been corrected in the
 plan.
+
+## 14. The about page — approved 2026-08-25
+
+Heading: **About Isasearch**. Six sections. §1–§4 reuse wording locked
+elsewhere in this file (named beside each); the sentences marked *new* were
+approved by the user on 2026-08-25.
+
+**What is indexed**
+
+> Isasearch covers the Isabelle release 2025-2 and the Archive of Formal Proofs
+> snapshot of 2026-05-13, and nothing outside them. The index covers theorems,
+> together with the rules that Isabelle derives from `datatype`, `inductive` and
+> `function` definitions. It also covers constants, types, classes, locales, proof
+> methods and named theorems. In total it holds «1 230 467» entities. The index
+> was built on «2026-08-20».
+>
+> An entity has one of 11 kinds: Theorem, Named theorems, Constant, Type, Class,
+> Locale, Proof method, Introduction rule, Elimination rule, Induction rule and
+> Case split. **Named theorems** is a `named_theorems` declaration, such as
+> `approximation_preproc`. **Case split** is a case rule: one case for each
+> constructor of a datatype, or for each introduction rule of an inductive
+> definition. A rule whose name ends in `.split`, such as `option.split`, has the
+> kind Theorem here.
+
+(§2's summary; the first sentence and "The index was built on" are *new*; the
+kind sentences are §3.6's hovers.)
+
+**How a search works**
+
+> A query is required. It puts the results in order, and only the first 200
+> appear. The filters are optional: they decide which entities are eligible to be
+> ordered at all. The filters do not affect the order.
+>
+> With the BM25 checkbox selected, the semantic-similarity results (from the
+> embedding model) and the BM25 word-matching results are combined with
+> reciprocal rank fusion (RRF). Cleared, only semantic similarity is used.
+> Isasearch ranks every entity that satisfies your conditions and returns the
+> best 200.
+
+(§2 and §4.5; the checkbox hover recast as a sentence, *new* in that form.)
+
+**How a condition is matched**
+
+The two paragraphs of §3.5 verbatim, then:
+
+> A condition matches text, not patterns. It has no variables: `?n` searches for
+> the name `n`. To search by the structure of a term, use Isabelle:
+> `find_theorems` and `find_consts` search structurally inside a session.
+
+(§5.1.)
+
+**About the explanations**
+
+> Every entity carries an English explanation. It is written by a language model
+> from the formal statement, not by the theory's authors. It may be imprecise or
+> wrong. Where the explanation and the statement disagree, the statement is the
+> correct one. Isasearch searches this text as well, so an entity with a poor
+> explanation may rank lower than it deserves.
+
+(The first sentence *new*; the rest §4.2, D30.)
+
+**Limits and what is recorded**
+
+> Each network address may make 1 000 searches per UTC day, and 5 within any 10
+> seconds. One search is one press of the search button: turning a page of
+> results does not count, and editing a condition costs nothing until you search
+> again.
+>
+> To count searches, Isasearch keeps a salted hash of your network address for
+> the current day and the day before, together with the country and the network
+> it belongs to. The address itself is not stored, and the query text is not
+> stored with it.
+
+(First paragraph §7; second *new*.)
+
+**Authors**
+
+> Isasearch is made by [Qiyuan Xu](https://qiyuan.me), with
+> [Claude Code](https://claude.com/claude-code). The source is on
+> [GitHub](https://github.com/xqyww123/isasearch-web).
+
+(*new*.)
+
+The page ends with §9's footer line.

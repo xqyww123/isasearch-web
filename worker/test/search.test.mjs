@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { Tokenizer } from '../../site/tokenizer/isabelle_tokenizer.js';
 import { KINDS, canonicalKinds, kindsPhrase, embeddingInput,
          DEFAULT_KINDS_PHRASE } from '../src/kinds.js';
-import { compileRequest, normalizeQuery, tupfQueryBody, rowsOf, collapse,
+import { compileRequest, normalizeQuery, tupfQueryBody, rowsOf, collapse, entityOf,
          matchedTheories, SearchError, RESULT_LIMIT, RRF_CONSTANT } from '../src/search.js';
 
 const asset = JSON.parse(readFileSync(
@@ -217,34 +217,55 @@ test('rowsOf accepts exactly one results entry and refuses the unfused shape', (
 
 // ---- collapse and D26 marking ---------------------------------------------
 
+// Universal keys as the export stores them (base64url of the bytes).  A
+// theorem-alike key is 32 bytes: 16-byte theory prefix, tag, 15-byte digest.
+const b64 = (bytes) => Buffer.from(bytes).toString('base64url');
+const thmKey = (prefix, tag, digest = 7) =>
+  b64([...Array(16).fill(prefix), tag, ...Array(15).fill(digest)]);
+const KEY_THM = thmKey(1, 0x02);          // Theorem
+const KEY_INTRO = thmKey(1, 0x12);        // its Introduction-rule twin
+const KEY_ELIM = thmKey(1, 0x22);         // its Elimination-rule twin
+const KEY_OTHER_PREFIX = thmKey(9, 0x02); // same digest, proved under other theories
+const KEY_CONST = b64([...Array(16).fill(1), 0x01, ...Buffer.from('List.sorted')]);
+const KEY_LOCALE = b64([...Array(16).fill(1), 0x05, ...Buffer.from('List.sorted')]);
+
 // A row as turbopuffer returns it, score and all — collapse must strip these.
 const row = (over) => ({
   '$dist': 0.0328, vector: [0.1], expr_subtokens: ['e'],
-  key: 'k', group: 'g', name: 'n', expr: 'e', theories: [], kind: 'lemma',
+  id: 'u', key: KEY_THM, name: 'n', expr: 'e', theories: [], kind: 'lemma',
   position: '', source_link: '', from_collection: '', interpretation: 'i',
   ...over,
 });
 
-test('D5: rows sharing a group become one card, kinds unioned, rank kept; D48: no score', () => {
+test('golden standard: theorem-alike keys equal but for the tag byte are one entity', () => {
+  assert.equal(entityOf(KEY_THM), entityOf(KEY_INTRO));
+  assert.equal(entityOf(KEY_THM), entityOf(KEY_ELIM));
+  assert.notEqual(entityOf(KEY_THM), entityOf(KEY_OTHER_PREFIX));  // Overapproximation.avars_aval ×2
+  assert.notEqual(entityOf(KEY_CONST), entityOf(KEY_LOCALE));      // name-addressed never merge
+});
+
+test('D5: rows of one entity become one card, kinds unioned, rank kept; D48: no score', () => {
   const cards = collapse([
-    row({ key: 'a', group: 'g1', kind: 'lemma', interpretation: 'best' }),
-    row({ key: 'b', group: 'g2', kind: 'constant' }),
-    row({ key: 'c', group: 'g1', kind: 'introduction rule', interpretation: 'worse' }),
-    row({ key: 'd', group: 'g1', kind: 'lemma' }),
+    row({ id: 'ua', key: KEY_THM, kind: 'lemma', interpretation: 'best' }),
+    row({ id: 'ub', key: KEY_CONST, kind: 'constant' }),
+    row({ id: 'uc', key: KEY_INTRO, name: 'n.intros(4)', kind: 'introduction rule',
+          interpretation: 'worse' }),
+    row({ id: 'ud', key: KEY_OTHER_PREFIX, kind: 'lemma' }),
+    row({ id: 'ue', key: KEY_LOCALE, kind: 'locale' }),
   ]);
-  assert.equal(cards.length, 2);
+  assert.deepEqual(cards.map((c) => c.id), ['ua', 'ub', 'ud', 'ue']);
   assert.deepEqual(cards[0].kinds, ['lemma', 'introduction rule']);
   assert.equal(cards[0].interpretation, 'best');  // the ranking picks the representative
-  assert.equal(cards[1].key, 'b');
+  assert.equal(cards[0].name, 'n');               // and its name, not the twin's
   for (const card of cards) {
     assert.deepEqual(Object.keys(card).sort(), [
-      'expr', 'from_collection', 'group', 'interpretation', 'key', 'kinds',
+      'expr', 'from_collection', 'id', 'interpretation', 'key', 'kinds',
       'name', 'position', 'source_link', 'theories']);
   }
 });
 
 test('collapse: an attribute the row lacks is the empty value, never a missing key', () => {
-  const [card] = collapse([{ group: 'g', kind: 'lemma' }]);
+  const [card] = collapse([{ key: KEY_THM, kind: 'lemma' }]);
   assert.equal(card.expr, '');
   assert.deepEqual(card.theories, []);
   assert.equal(card.source_link, '');
@@ -252,14 +273,14 @@ test('collapse: an attribute the row lacks is the empty value, never a missing k
 
 test('D26: theories matching an active Theory Name condition are marked', () => {
   const cards = collapse([
-    row({ group: 'g1',
+    row({ key: KEY_THM,
           theories: ['HOL.List', 'HOL-Library.Multiset', 'Affine_Arithmetic.Foo'] }),
   ]);
   matchedTheories(cards, [tokenizer.run('HOL-Library')], tokenizer);
   assert.deepEqual(cards[0].matched_theories, ['HOL-Library.Multiset']);
 
   // No active condition: the field is absent, not empty.
-  const bare = collapse([row({ group: 'g2', theories: ['HOL.List'] })]);
+  const bare = collapse([row({ key: KEY_OTHER_PREFIX, theories: ['HOL.List'] })]);
   matchedTheories(bare, [], tokenizer);
   assert.ok(!('matched_theories' in bare[0]));
 });

@@ -460,19 +460,43 @@ def asset_namespace(namespace: str) -> str:
 
 
 def write_asset_sentinel(namespace: str, asset: dict, digest: str, *,
-                         region: str, key: str) -> None:
-    """Write (or overwrite) the companion namespace's single row."""
+                         entities: int, built: str, region: str, key: str) -> None:
+    """Write (or overwrite) the companion namespace's single row.  Besides the
+    asset digest it carries what the landing page prints (ruled 2026-08-25):
+    the entity count under the golden standard and the build date, so a
+    republish is one export and one `TPUF_NAMESPACE` edit, nothing counted by
+    hand."""
     request("POST", f"/v2/namespaces/{asset_namespace(namespace)}", {
         "distance_metric": "cosine_distance",
         "schema": {"id": "uuid",
                    "vector": {"type": "[2]f32", "ann": True},
                    "digest": {"type": "string", "filterable": False},
-                   "tokenizer_rule": {"type": "int", "filterable": False}},
+                   "tokenizer_rule": {"type": "int", "filterable": False},
+                   "entities": {"type": "int", "filterable": False},
+                   "built": {"type": "string", "filterable": False}},
         "upsert_rows": [{"id": ASSET_SENTINEL_ID, "vector": [1.0, 0.0],
                          "digest": digest,
-                         "tokenizer_rule": asset["tokenizer_rule"]}],
+                         "tokenizer_rule": asset["tokenizer_rule"],
+                         "entities": entities, "built": built}],
     }, region=region, key=key)
-    _log(f"{asset_namespace(namespace)}: asset digest {digest[:12]} recorded")
+    _log(f"{asset_namespace(namespace)}: asset digest {digest[:12]}, "
+         f"{entities} entities, built {built} recorded")
+
+
+# D5 as amended 2026-08-25 (the user's golden standard): two records are one
+# entity iff both are theorem-alike and their universal keys agree in every byte
+# but the kind tag.  The Worker's `entityOf` is the same function.
+def entity_of(key: bytes) -> bytes:
+    from Isabelle_RPC_Host.universal_key import is_thm_rule_key
+    return key[:16] + b"\x00" + key[17:] if is_thm_rule_key(key) else key
+
+
+def count_entities(sessions, registry) -> int:
+    """The landing page's number: distinct entities among the shippable records."""
+    counts: 'dict[str, int]' = dict.fromkeys(
+        ("records", "undecodable", "wip", "experience", "out of scope"), 0)
+    return len({entity_of(key)
+                for key, _rec, _th in iter_shippable(sessions, registry, counts)})
 
 
 def commit_asset(path: str, text: str) -> None:
@@ -886,8 +910,10 @@ def run(*, isabelle_home: str, afp_dir: str, committed_asset: str,
         counts: 'dict[str, int]' = dict.fromkeys(
             ("records", "undecodable", "wip", "experience", "out of scope",
              "exported"), 0)
-        documents = iter_documents(sessions, registry, get_vector, tokenize, counts,
-                                   source_links)
+        entities: 'set[bytes]' = set()
+        documents = ((k, d) for k, d in iter_documents(
+            sessions, registry, get_vector, tokenize, counts, source_links)
+            if entities.add(entity_of(k)) is None)
         if resume_after is not None:
             documents = ((k, d) for k, d in documents if k > resume_after)
         if limit:
@@ -928,7 +954,9 @@ def run(*, isabelle_home: str, afp_dir: str, committed_asset: str,
         # The committed asset declares what is DEPLOYED (D46), so only a run that
         # deployed the whole corpus may move it — and only such a run names the
         # asset its namespace answers to.
-        write_asset_sentinel(namespace, asset, digest, region=region, key=key)
+        write_asset_sentinel(namespace, asset, digest, entities=len(entities),
+                             built=time.strftime("%Y-%m-%d", time.gmtime()),
+                             region=region, key=key)
         commit_asset(committed_asset, text)
     for what, n in counts.items():
         _log(f"  {what:<14} {n}")
@@ -984,6 +1012,8 @@ def build_parser(**kw) -> argparse.ArgumentParser:
     p.add_argument("--skip-completeness-gate", action="store_true",
                    help="do not check that every shippable record has a vector; "
                         "for a --limit run, never for a real export")
+    p.add_argument("--built", metavar="YYYY-MM-DD",
+                   help="with --asset-sentinel-only: the build date to record")
     p.add_argument("--asset-sentinel-only", action="store_true",
                    help="write only the companion `.asset` namespace for "
                         "--namespace, from the committed asset; for a namespace "
@@ -992,25 +1022,29 @@ def build_parser(**kw) -> argparse.ArgumentParser:
 
 
 def write_sentinel_from_committed(namespace: str, committed_asset: str, *,
-                                  region: str) -> None:
-    """The one-off for a namespace that predates the sentinel: the committed asset
-    IS what that namespace was built under (D46's invariant), so its digest is
-    what the sentinel must say."""
+                                  built: str, region: str) -> None:
+    """The one-off for a namespace that predates the sentinel or its fields: the
+    committed asset IS what that namespace was built under (D46's invariant), so
+    its digest is what the sentinel must say; the entity count is taken from the
+    store, which must be the generation the namespace was exported from; the
+    build date is given, since a re-stamp is not a rebuild."""
     with open(committed_asset, encoding="utf-8") as f:
         text = f.read()
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    write_asset_sentinel(namespace, json.loads(text), digest,
-                         region=region, key=api_key())
+    home, afp = _default_trees()
+    entities = count_entities(declared_sessions(home, afp), theory_registry())
+    write_asset_sentinel(namespace, json.loads(text), digest, entities=entities,
+                         built=built, region=region, key=api_key())
 
 
 def run_from_args(args: argparse.Namespace) -> int:
     """The body both entry points share: locate the trees, run, report a failure."""
     try:
         if args.asset_sentinel_only:
-            if not args.namespace:
-                raise ExportError("--asset-sentinel-only needs --namespace")
+            if not (args.namespace and args.built):
+                raise ExportError("--asset-sentinel-only needs --namespace and --built")
             write_sentinel_from_committed(args.namespace, args.committed_asset,
-                                          region=args.region)
+                                          built=args.built, region=args.region)
             return 0
         home, afp = args.isabelle_home, args.afp
         if not (home and afp):

@@ -1,0 +1,81 @@
+<!-- The search page: the landing state and the result state share this markup;
+     app.js switches between them.  Strings: site/COPY.md (section beside each). -->
+<section class="landing" id="landing">
+  <div class="landing-col">
+    <div>
+      <h1>Isasearch</h1>
+      <!-- §2 -->
+      <div class="intro">Search Isabelle/HOL and the Archive of Formal Proofs by describing what you want in English. The index covers theorems, together with the rules that Isabelle derives from <code>datatype</code>, <code>inductive</code> and <code>function</code> definitions. It also covers constants, types, classes, locales, proof methods and named theorems. In total it holds {{entities}} entities.</div>
+    </div>
+    <form class="search-box" id="search-form">
+      <input id="q" placeholder="describe what you are looking for" autocomplete="off" autofocus>
+      <button type="submit">Search</button>
+    </form>
+    <!-- §2 -->
+    <div class="help">A query is required. It puts the results in order, and only the first 200 appear. The filters are optional: they decide which entities are eligible to be ordered at all. The filters do not affect the order.<br><br><strong>Do you remember only part of a name?</strong> Type the part you remember into the search box, and type it into an Entity Name condition as well. A condition keeps only those entities whose names contain what you typed, matched as <strong>whole parts</strong> &mdash; <code>sorted</code> finds <code>sorted_wrt</code>, but <code>sort</code> finds nothing &mdash; so type a whole underscore-separated or dot-separated piece, and check the capitals.</div>
+    <div id="filters-home"></div>
+  </div>
+</section>
+
+<!-- §3: the Filters panel group.  One element, moved between the landing and the
+     result state. -->
+<div class="filters" id="filters" data-open="true">
+  <button type="button" class="filters-bar" id="filters-bar">
+    <span class="caret">&#9662;</span>
+    <span class="title">Filters</span>
+    <span class="summary" id="filters-summary"></span>
+  </button>
+  <div class="filters-body" id="filters-body">
+    <!-- §3.1 hovers -->
+    <div class="panel-heading" title="The full name of the entity, which begins with the theory that declares it: Path_Connected.path_image_join. The name has no session prefix, so type Path_Connected, not HOL-Analysis.Path_Connected.">Entity Name</div>
+    <div class="conditions" data-panel="name"></div>
+
+    <div class="panel-heading" title="The expression that the result card prints: the proposition for a theorem or a derived rule, the type for a constant, and the declaration as it is written in the source for a type, a class, a locale, a proof method or named theorems.">Expression</div>
+    <div class="conditions" data-panel="expr"></div>
+
+    <div class="panel-heading" title="The associated theories, written with their session: HOL-Analysis.Path_Connected. A constant, a type, a class, a locale, a proof method and named theorems each have exactly one such theory. A theorem is matched against a different set — see the note below the panel.">Theory Name</div>
+    <div class="conditions" data-panel="theory"></div>
+    <!-- §3.4, shown by app.js when it applies -->
+    <div id="theory-caveat-spacer" hidden></div>
+    <div class="theory-caveat" id="theory-caveat" hidden>
+      <p><strong>Theory Name conditions work differently on theorems.</strong> A Theory Name condition on a theorem matches every theory that declares a constant appearing in the theorem's statement. That is a different question from &ldquo;where was this theorem proved&rdquo;, although the two usually overlap: a theorem matches its own theory when its statement uses a constant from it, and matches many others besides. A theorem often has several such theories, and sometimes more than twenty.</p>
+      <p>To search for the theory that proves a theorem, use an <strong>Entity Name</strong> condition instead: an entity's name begins with the name of the theory that proves it, up to the first dot, so a condition of <code>Path_Connected</code> finds theorems proved in <code>Path_Connected</code>. Write the theory's own name without the session prefix. Such a condition also matches any entity whose name mentions <code>Path_Connected</code> anywhere else.</p>
+    </div>
+
+    <div class="panel-heading" title="Matches the condition against Entity Name, Expression and Theory Name together. contains matches when the text appears in at least one of the three; excludes matches only when it appears in none of them.">All</div>
+    <div class="conditions" data-panel="all"></div>
+    <div></div>
+    <!-- §3.3 -->
+    <div class="panel-note">This condition matches text in Entity Name, Expression or Theory Name.</div>
+
+    <div class="panel-heading" title="If you select several kinds, the search returns entities of any of those kinds. Conditions behave in the opposite way: a result must satisfy every one of them.">Kind</div>
+    <div class="kinds" id="kinds"></div>
+
+    <div class="panel-heading">Ranking</div>
+    <!-- §2, the user's sentence verbatim; hover locked -->
+    <label class="ranking" title="Selected: the semantic-similarity results (from the embedding model) and the BM25 word-matching results are combined with reciprocal rank fusion (RRF). Cleared: only semantic similarity is used.">
+      <input type="checkbox" id="bm25" checked>
+      <span>Additionally uses the BM25 word-matching algorithm to improve the results. Clear it if you want a pure semantic search.</span>
+    </label>
+
+    <div></div>
+    <div class="filters-actions">
+      <button type="button" class="clear-all" id="clear-all">Clear all</button>
+    </div>
+  </div>
+  <!-- §3.5, always shown -->
+  <div class="filters-foot" id="filters-foot">
+    <p><strong>How a condition is matched.</strong> Isasearch cuts a name into parts at <code>_</code>, <code>.</code>, the question mark, and the subscript and superscript marks. Those five are separators: they are thrown away and cannot be matched. Every other character that is not a letter or a digit &mdash; an operator or a bracket, such as <code>+</code> or <code>&#10214;</code> &mdash; is a part on its own and can be matched. A condition matches when its parts appear as whole parts, in the order you typed them, with nothing between them. So <code>sorted</code> matches <code>sorted_wrt</code> and <code>image_join</code> matches <code>Path_Connected.path_image_join</code>; <code>sort</code> matches neither, because Isasearch matches only whole parts and never a fragment of one. Upper and lower case are different: <code>Path</code> and <code>path</code> do not match each other. Spacing is ignored &mdash; <code>x + y</code> and <code>x+y</code> are the same condition.</p>
+    <p><strong>How conditions combine.</strong> A result must satisfy every condition. <code>excludes</code> reverses one condition: the result must not contain that text. Kind selections are not conditions and behave in the opposite way &mdash; a result appears if its kind is one of the kinds you select.</p>
+  </div>
+</div>
+
+<section class="results" id="results" hidden>
+  <div id="filters-results"></div>
+  <div id="message" class="message" hidden></div>
+  <div class="status-line" id="status-line" hidden><span id="status"></span></div>
+  <div class="list" id="list"></div>
+  <div class="pager" id="pager" hidden></div>
+  <div class="list-end" id="list-end" hidden></div>
+  <div id="empty"></div>
+</section>

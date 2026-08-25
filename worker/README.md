@@ -16,12 +16,30 @@ hosting); nothing here overrides it.
 | `src/kinds.js` | One table: the eleven stored kind values with their instruction phrases; canonical kind order; the exact embedding input text (a snapshot of the DB library's defaults). |
 | `src/embed.js` | Fireworks Qwen3-Embedding-8B with the KV cache (keyed on the SHA-256 of the exact text sent; the write rides `ctx.waitUntil`). |
 | `src/gate.js` | The `DailyGate` Durable Object: exact per-address daily counts and the `daily` statistics table. |
-| `test/` | Unit tests over the pure core: `node --test worker/test` (19). |
+| `src/pages.js` | The pages (§9.5): the shell around a fragment from `../site/app/pages/`, the search page, the about page, the entity page built from one record. Card markup comes from `../site/app/public/render.js`, shared with the browser. |
+| `src/blake2b.js` | BLAKE2b, for §6.2's document id of a universal key — `/entity/<key>` fetches by primary key. Checked against Python on `test/blake2b.vectors.json`. |
+| `test/` | Unit tests over the pure core and the hash: `node --test worker/test` (23). |
 | `probe/live_probe.mjs` | Read-only integration probe against the real Fireworks endpoint and the live namespace (see its header). Nine checks, all passing 2026-08-25. |
 
 The tokenizer is imported from `../site/tokenizer/` — the single
 JavaScript implementation, never copied. `asset.json` is imported as text so
-the Worker can hash the committed bytes for the sentinel check.
+the Worker can hash the committed bytes for the sentinel check. The front end
+lives in `../site/app/`: `public/` (style, `app.js`, `render.js`,
+`abbrevs.json`) is served as static assets before the Worker runs; `pages/`
+holds the HTML fragments the Worker fills.
+
+## Routes
+
+| Route | What |
+| --- | --- |
+| `GET /` | The search page (landing and result states; `app.js` drives it). |
+| `GET /about` | COPY §14. |
+| `GET /entity/<universal key, base64url>` | One page per record (D9 as amended 2026-08-25): the record by primary key, the ten nearest by its own vector. Edge-cached 4 h. 404 page (COPY §8) when the key is unknown. |
+| `POST /api/search` | Below. |
+| `GET /source/*` | The published source tree off R2. |
+
+The sentinel row (`<namespace>.asset`) also carries `entities` and `built`,
+which every page prints; a republish writes them (ruled 2026-08-25).
 
 ## The search API
 
@@ -40,13 +58,16 @@ the Worker can hash the committed bytes for the sentinel check.
 ```
 
 Response `{ results, limit_reached, parts }`: `results` are D5's collapsed
-cards in rank order (`key`, `group`, `name`, `from_collection`, `kinds`,
-`expr`, `theories`, `position`, `source_link`, `interpretation`, plus
+cards in rank order — under the golden standard of 2026-08-25, two rows are
+one card iff both are theorem-alike and their universal keys agree in every
+byte but the kind tag — (`id` — the highest-ranked member record's document
+id, the entity page the card links to — `key`, `name`, `from_collection`,
+`kinds`, `expr`, `theories`, `position`, `source_link`, `interpretation`, plus
 `matched_theories` when a contains-condition reaches the Theory Name field
 directly or through All); no relevance number anywhere (D48);
 `limit_reached` says whether the fused 200-row cap was hit (§4.5's
 end-of-list copy branches on it); `parts` is each condition's surviving
-subtokens, for the §4.6 "was read as" notice.
+subtokens, which the §5.1 empty state prints.
 
 Error codes (the visitor-facing strings stay in `site/COPY.md`):
 `query_missing`, `query_too_long`, `condition_too_long`, `condition_empty`

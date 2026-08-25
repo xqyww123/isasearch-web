@@ -29,7 +29,7 @@ const POLARITIES = ['contains', 'excludes'];
 
 // What a result card needs and nothing else: no vector, no subtoken arrays.
 const INCLUDE_ATTRIBUTES = [
-  'key', 'group', 'name', 'expr', 'theories', 'kind', 'position',
+  'key', 'name', 'expr', 'theories', 'kind', 'position',
   'source_link', 'from_collection', 'interpretation',
 ];
 
@@ -56,7 +56,7 @@ export function normalizeQuery(s) {
  * Returns { query, bm25, kinds, filters, parts, theoryParts }:
  *   filters      the tree attached to every leg (null when nothing filters)
  *   parts        each condition's surviving subtokens, in request order — the
- *                front end's §4.6 notice ("«_ + _» was read as «+»") reads it
+ *                §5.1 empty state prints them
  *   theoryParts  the subtoken lists of the conditions that reach the Theory
  *                Name field with `contains` — directly or through All (COPY
  *                §4.3) — which D26's marking consumes
@@ -123,6 +123,7 @@ export function compileRequest(body, tokenizer) {
   return { query, bm25, kinds, filters, parts, theoryParts };
 }
 
+
 /** The turbopuffer request body for one search: always a `multi_query`, so
  * the response has one shape (`results[0].rows`) in both retrieval states.
  *
@@ -161,26 +162,48 @@ export function rowsOf(data) {
   return results[0].rows;
 }
 
-/** D5's collapse, after ranking: rows sharing a `group` become one card whose
- * kinds are those of the members that reached the result set (D38's stored
- * union was withdrawn 2026-08-25) and whose other fields are the
- * highest-ranked member's — the ranking picks the representative.  Row order
- * is rank order and the cards keep it.  D48: no score of any kind is carried
- * over; every field is named here, so an attribute the row lacks becomes the
- * empty value rather than a missing key.
+/** D5's collapse, after ranking, under the user's golden standard of
+ * 2026-08-25: two rows are one entity iff both are theorem-alike (32-byte
+ * universal key whose tag byte, the 17th, is one of Theorem 0x02 and the four
+ * rule kinds 0x12/0x22/0x32/0x42) and their keys agree in every byte but the
+ * tag.  A name-addressed record never merges.  The stored `group` column
+ * (hash of name and expression) is NOT this relation — it merged the same
+ * statement proved in two AFP entries and split the same fact under two
+ * names — and is no longer read.
+ *
+ * The card's fields are the highest-ranked member's — the ranking picks the
+ * representative — and `id` is that member's document id, where the card
+ * links (D9 as amended: one entity page per record); `kinds` are the kinds of
+ * the members that reached the result set.  Row order is rank order and the
+ * cards keep it.  D48: no score of any kind is carried over; every field is
+ * named here, so an attribute the row lacks becomes the empty value rather
+ * than a missing key.
  */
+const THEOREM_ALIKE_TAGS = new Set([0x02, 0x12, 0x22, 0x32, 0x42]);
+const TAG_INDEX = 16;
+
+/** The collapse class of a row: its universal key with the tag byte masked when
+ * theorem-alike, the key itself otherwise (so it merges with nothing). */
+export function entityOf(keyBase64url) {
+  const bytes = Uint8Array.from(
+    atob(keyBase64url.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+  if (bytes.length === 32 && THEOREM_ALIKE_TAGS.has(bytes[TAG_INDEX])) bytes[TAG_INDEX] = 0;
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export function collapse(rows) {
-  const byGroup = new Map();
+  const byEntity = new Map();
   const cards = [];
   for (const row of rows) {
-    const seen = byGroup.get(row.group);
+    const entity = entityOf(row.key ?? '');
+    const seen = byEntity.get(entity);
     if (seen) {
       if (!seen.kinds.includes(row.kind)) seen.kinds.push(row.kind);
       continue;
     }
     const card = {
+      id: row.id,
       key: row.key ?? '',
-      group: row.group,
       name: row.name ?? '',
       from_collection: row.from_collection ?? '',
       kinds: [row.kind],
@@ -190,7 +213,7 @@ export function collapse(rows) {
       source_link: row.source_link ?? '',   // '' is D42's absent form
       interpretation: row.interpretation ?? '',
     };
-    byGroup.set(row.group, card);
+    byEntity.set(entity, card);
     cards.push(card);
   }
   return cards;

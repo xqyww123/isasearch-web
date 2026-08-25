@@ -158,13 +158,29 @@ reader of those sections needs to find the decision that used to govern them.
   Consequence: schematic and free variables become indistinguishable to search.
 - **D5** (2026-08-09, **reversed 2026-08-13**) — **there is no merge.** One site
   document per *record*, carrying that record's own universal key, vector,
-  interpretation and single `kind`. Cross-kind duplicates — the same `(name,
-  entity expression)` recorded once as a `Theorem` and again as an
-  `Introduction rule` — are collapsed **in the response, after ranking**, into
-  one card whose kinds are the union (of the members that reached the result
-  set — D38's stored group-wide union was withdrawn 2026-08-25) and whose
-  interpretation is **the
-  highest-scoring member's**. The original decision merged at export time; it
+  interpretation and single `kind`. Cross-kind duplicates are collapsed **in
+  the response, after ranking**, into one card whose kinds are the union (of
+  the members that reached the result set — D38's stored group-wide union was
+  withdrawn 2026-08-25) and whose interpretation is **the highest-scoring
+  member's**. **What counts as a duplicate is the user's golden standard of
+  2026-08-25:** two records are one entity iff both are theorem-alike —
+  32-byte universal key whose tag byte (the 17th) is `THEOREM` 0x02,
+  `INTRODUCTION_RULE` 0x12, `ELIMINATION_RULE` 0x22, `INDUCTION_RULE` 0x32 or
+  `CASE_SPLIT_RULE` 0x42 — and their keys agree in every byte but the tag. A
+  name-addressed record never merges. Until that day the relation was the
+  stored `group` column, a hash of `(name, entity expression)`, and it was
+  wrong both ways, measured on the local store (same generation as the live
+  index): it merged 25 335 groups whose members' keys differ beyond the tag —
+  e.g. `Overapproximation.avars_aval`, the same lemma proved in the AFP entries
+  `IMP_Noninterference` and `IMP_Noninterference_Extension`, two records with
+  two source positions, which one card cannot show — and it split 4 919 pairs
+  whose keys differ only in the tag but whose names differ
+  (`PRecFun2.PrimRec1'p.snd` / `PRecFun2.PrimRec1'p.intros(4)`, one fact under
+  two names). Under the standard there are 105 768 collapse classes, all of
+  them Theorem-plus-rule, 212 310 records, and **1 230 467 entities** in the
+  live corpus. The Worker computes the class from the row's `key` (tag byte
+  masked), so no re-export was needed; the `group` column is no longer read
+  and is dropped at the next export. The original decision merged at export time; it
   was reversed because nothing could say which member supplied the id, the
   vector or the interpretation, and all three genuinely differ (the kind is
   inside the embedded text via `pretty_print`). Collapsing after ranking makes
@@ -188,12 +204,25 @@ reader of those sections needs to find the decision that used to govern them.
   query is rejected rather than falling back to some other ordering.
 - **D8** — **runs of ASCII symbolic characters merge into one token**
   (Isabelle's `sym_ident` rule): `::` is one token, not two colons.
-- **D9** — **entity pages exist**, server-rendered, **one per `group`** — that is,
-  one per distinct `(name, entity expression)` pair, which is exactly what a result
-  card collapses to (D5 as reversed, §6.1) — for search-engine discoverability
-  (§9.4). This decision said "one per site document" until 2026-08-19, which was
-  written under the original D5 where the two coincided; under the reversal a site
-  document is one per *record* and several records can share a `group`.
+- **D9** — **entity pages exist**, server-rendered, **one per record** — one per
+  site document, addressed by its universal key, base64url, at
+  `/entity/<key>` (the user's choice, 2026-08-25: the key is the semantic
+  DB's own identity, so any tool holding a key can form the URL without a
+  lookup; the Worker derives the document id from it — §6.2's BLAKE2b-128,
+  ported to the Worker and checked against Python-generated vectors) — for
+  search-engine discoverability (§9.4). **Amended by the user, 2026-08-25.** From
+  2026-08-19 to that day it said "one per `group`", on the argument that
+  cross-kind twin records of one statement would otherwise make duplicate pages.
+  Measured 2026-08-25 (60 Introduction-rule groups sampled): the twins carry
+  **different** interpretations, each written from its own kind's point of view,
+  and each its own vector; a page per `group` would have to choose one to show
+  or show both, and the user rejected hiding either ("强烈反对"). One page per
+  record shows exactly what its card showed — the collapse (D5) already makes
+  the highest-ranked member the card's representative, so the card links to
+  that member's page and the page needs no rule of its own for the
+  interpretation or for the vector its related entities come from. Duplicate
+  pages and a 1.34 M-URL sitemap in place of 1.21 M were ruled no problem. No
+  sibling list on the page (the user, 2026-08-25).
 - **D10** — **displayed fields are the entity name and the entity expression.**
   The interpretation is present but collapsed by default.
 - **D11** — **`Token.source_of` in `pide_state.ML` is a defect and will be
@@ -2153,10 +2182,11 @@ port. To stop them drifting:
 ```
 id               UUID  = a 128-bit hash of the universal key (§6.2); stable,
                        because D33's key repair runs before any export
-group            string  128-bit hash of `(name, entity expression)`: the
-                       identity of the entity page (§9.4) and the key the
-                       response collapses on (D5). Filtering is unbilled, so
-                       assembling a page from a group costs nothing extra
+group            string  128-bit hash of `(name, entity expression)`. **No
+                       longer read** (D5 as amended 2026-08-25: the collapse
+                       class is the universal key with the tag byte masked,
+                       computed by the Worker from `key`); drop at the next
+                       export
 vector           [4096]f16, cosine_distance   (D31)
 
   display
@@ -2977,9 +3007,13 @@ replacement covers the unambiguous abbreviations only.
 
 ### 9.4 Entity pages
 
-One server-rendered page per **`group`** at a stable URL, carrying name, kinds,
-theory, expression, interpretation, source link, and a "related entities" block
-computed from the ten nearest vectors.
+One server-rendered page per **record** at a stable URL, `/entity/<universal
+key, base64url>` (D9 as amended 2026-08-25; the paragraph "The page identity
+is `group`" below records the superseded ruling), carrying name, kind,
+theories, expression, interpretation, source link, and a "related entities"
+block computed from the ten nearest vectors
+to the record's own vector — which turbopuffer returns on request
+(`include_attributes: ["vector"]`, measured 2026-08-25).
 
 **The `from_collection` display rule applies here too**, not only to result cards: a
 page whose record carries the field shows `<from_collection>(_)` in place of the
@@ -2989,7 +3023,8 @@ D25 ships in the first release, so a page is precisely where showing the enumera
 invented name, `tendsto_intros(104)`, would be indexed and quoted. The related block is not decoration: it is
 what keeps these pages from being classed as thin content.
 
-**The page identity is `group`, not the site document**, and an earlier draft of D9
+**Superseded 2026-08-25 — the page identity is the record (D9 as amended); the
+paragraph is kept for the reasoning it records.** ~~The page identity is `group`, not the site document~~, and an earlier draft of D9
 and of this subsection said "one per site document". Under D5 as reversed there is
 one site document per *record*, and cross-kind duplicates — the same
 `(name, entity expression)` recorded once as a `Theorem` and again as an
@@ -3205,6 +3240,10 @@ f32, for comparison only
 per search   23 GB queried  $0.000023   +  ~200 KB returned  $0.000010  =  $0.000033
 per day      10 k searches $0.33   100 k $3.30   1 M $33.00
 per month    storage $7.59; initial load at 4 B/dim for writes, 22.3 GB x $2 = $45, or $22 batched
+             [WRONG — measured 2026-08-25 on the real invoice: the whole Aug 9–Sep 1 period,
+              full export and source_link patch included, billed writes at $0.07 total;
+              a full export costs cents, not $45. The $16 monthly minimum is never reached:
+              the period's usage was $1.24.]
 
 f16, as shipped (D31)
 per search   11.5 GB queried $0.0000115 +  ~200 KB returned  $0.000010  =  $0.0000215
@@ -3585,6 +3624,17 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   `name_subtokens`, so it stays in the export.
 - ~~Q13~~ — **settled by D23**: the theory filter matches subtokens like the
   other two, and the field is `theory_subtokens`.
+
+- **Q13 (2026-08-25, user: 有必要重新导入)** — **re-export with `_` and `.`
+  kept as tokens instead of dropped** (`name_1` → `name` `_` `1`, so it no longer
+  matches `name.1`, and `_ + _` finds nothing instead of every `+`), settling
+  what the 90 rendered sub/superscript characters become at the same time; and
+  use that run to test that the whole publish pipeline is stable and
+  one-command. Needs: both tokenizer implementations, `tokenizer_rule` bump,
+  asset + `expected.json` regenerated, COPY §0/§3.5/§5.1 rewritten and
+  reader-tested, export to a new namespace, `TPUF_NAMESPACE` edit, deploy,
+  old namespace deleted. Cost measured in cents (the $45 above was wrong).
+  **Deferred by the user until after the front end ships.**
 
 ## 13b. Reader testing of the interface copy — done
 

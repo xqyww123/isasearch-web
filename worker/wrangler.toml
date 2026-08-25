@@ -18,6 +18,16 @@ type = "Text"
 globs = ["**/asset.json"]
 fallthrough = true
 
+# The page fragments (§9.5) are text the Worker fills; the public files beside
+# them are served as static assets before the Worker runs.
+[[rules]]
+type = "Text"
+globs = ["**/pages/*.html"]
+fallthrough = true
+
+[assets]
+directory = "../site/app/public"
+
 # D18: everything North America.  Smart Placement puts the Worker next to
 # Fireworks and turbopuffer instead of next to the visitor; it governs the
 # /source/* route too (accepted 2026-08-25 — the zone cache rule serves the

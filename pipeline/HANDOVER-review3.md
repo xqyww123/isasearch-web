@@ -681,3 +681,29 @@ Discipline unchanged: commit/push only on the user's word; no coined words;
 user-visible copy verbatim from COPY.md or user-approved; ask before any
 design deviation; deploy/secret commands are run by the user with `!` (the
 classifier blocks me); never `isabelle build`.
+
+## FRONT END BUILT (2026-08-25) — local, not yet deployed
+
+Built and verified in the browser (the user's Chrome via MCP, plus headless
+screenshots): landing, result list (20/page, previous/next, §4.5 end copy),
+cards (kind labels, D26 theory line, clipped long expressions, explanation
+with D30 text, copy, source link/absent form), Filters panel group (four
+condition panels, contains/excludes, Kind buttons, BM25 checkbox, Clear all,
+collapsed summary, §3.4 amber note incl. the empty-selection reading),
+abbreviation replacement (36 entries, `site/build_abbrevs.py`), §5.1–5.7 empty
+states, §6/§7 messages, about page (COPY §14), entity page
+(`/entity/<key>`, ten nearest by the record's own vector).
+
+Rulings of the day, all recorded in the plan/COPY: page-per-record (D9
+amended), URL = universal key base64url (BLAKE2b port), collapse golden
+standard (D5 amended; `group` column unused), entity count 1 230 467 +
+build date in the sentinel row (live row restamped), PhiSymbols font (uploaded
+to R2 `source/fonts/`), header links about/source, no dark theme, §4.6 notice
+DELETED, no `?q=`, no "Type the symbols directly" paragraph, product name
+"Isasearch" in visible text. Q13: re-export with `_`/`.` as tokens — deferred.
+
+Before deploying: `wrangler deploy` (user runs it; `[assets]` is new — first
+deploy uploads site/app/public). Then live re-test: `/`, `/about`, one
+`/entity/…`, a search from the page. Still owed before "shipped": COPY draft 4
++ §14 reader testing (§13b); sitemaps (§9.4, 1.34 M URLs). `worker/.dev.vars`
+exists locally for `wrangler dev` — delete when done.

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+{{head}}
+</head>
+<body>
+<header class="header">
+  <a class="brand" href="/">Isasearch</a>
+  <span class="header-meta">{{entities}} entities &middot; Isabelle release {{release}} &middot; AFP snapshot {{snapshot}}</span>
+  <form class="header-search" id="header-search" hidden>
+    <input id="q-header" placeholder="describe what you are looking for" autocomplete="off">
+    <button type="submit">Search</button>
+  </form>
+  <nav class="header-links">
+    <a href="/about">about</a>
+    <a href="https://github.com/xqyww123/isasearch-web">source</a>
+  </nav>
+</header>
+<main>
+{{main}}
+</main>
+<footer class="footer">
+  <span class="note">English explanations are <strong>written by a language model</strong> from the formal statement, not by the theory&rsquo;s authors. Where the explanation and the statement disagree, the statement is the correct one.</span>
+  <span class="built">Isasearch &middot; built for Isabelle release {{release}} &middot; AFP snapshot {{snapshot}} &middot; index built {{built}}</span>
+</footer>
+</body>
+</html>
