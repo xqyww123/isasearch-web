@@ -32,6 +32,13 @@ export class DailyGate extends DurableObject {
         rejected   INTEGER NOT NULL DEFAULT 0,
         addresses  INTEGER NOT NULL DEFAULT 0
       );
+      CREATE TABLE IF NOT EXISTS daily_geo (
+        day       TEXT    NOT NULL,
+        country   TEXT    NOT NULL,
+        asn       INTEGER NOT NULL,
+        searches  INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (day, country, asn)
+      );
     `);
   }
 
@@ -53,6 +60,18 @@ export class DailyGate extends DurableObject {
            rejected  = rejected + excluded.rejected,
            addresses = addresses + excluded.addresses`,
       day, allowed ? 1 : 0, allowed ? 0 : 1, count === 1 ? 1 : 0);
+    // Where the searches came from, kept for good (ruled 2026-08-25).  This is
+    // a count and nothing else: no address, no hash, no query text — and it is
+    // separate from `counters` precisely so that the day's pruning below cannot
+    // take the statistics with it, which is what used to happen.  An unknown
+    // country or AS is stored as '' / 0 rather than NULL, so the primary key
+    // groups them instead of making every unknown a row of its own.
+    if (allowed) {
+      this.sql.exec(
+        `INSERT INTO daily_geo (day, country, asn, searches) VALUES (?, ?, ?, 1)
+           ON CONFLICT (day, country, asn) DO UPDATE SET searches = searches + 1`,
+        day, country ?? '', asn ?? 0);
+    }
     // Yesterday's rows are the rollback of a clock skew; anything older is not.
     this.sql.exec(`DELETE FROM counters WHERE day < ?`, previousDay(day));
     return { allowed, count };
@@ -61,6 +80,27 @@ export class DailyGate extends DurableObject {
   /** The usage statistics, newest day first. */
   stats() {
     return this.sql.exec(`SELECT * FROM daily ORDER BY day DESC`).toArray();
+  }
+
+  /** Searches by country and AS, newest day first — the permanent record that
+   * `counters` never was.  Nothing reads it yet; §11.1's statistics endpoint is
+   * still unbuilt. */
+  geo() {
+    return this.sql.exec(
+      `SELECT * FROM daily_geo ORDER BY day DESC, searches DESC`).toArray();
+  }
+
+  /** What the about page prints: searches answered in all, and since `sinceDay`
+   * (a UTC date the caller computed).  Refused searches are not counted — the
+   * page says "answered".  The `daily` table is never pruned, so "in all" means
+   * since the site opened.  No address and no query text is involved. */
+  usage({ sinceDay }) {
+    const all = this.sql.exec(
+      `SELECT COALESCE(SUM(searches), 0) AS n FROM daily`).one();
+    const recent = this.sql.exec(
+      `SELECT COALESCE(SUM(searches), 0) AS n FROM daily WHERE day >= ?`,
+      sinceDay).one();
+    return { total: all.n, recent: recent.n };
   }
 }
 

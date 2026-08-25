@@ -14,6 +14,7 @@ import { embedQuery } from './embed.js';
 import { DailyGate } from './gate.js';
 import { documentIdOf, keyBytesOf } from './blake2b.js';
 import { searchPage, aboutPageOf, entityPageOf, missingPage } from './pages.js';
+import { thin } from '../../site/app/public/render.js';
 
 export { DailyGate };
 
@@ -57,7 +58,16 @@ export default {
       return json(405, { error: { code: 'method_not_allowed' } });
     }
     if (url.pathname.startsWith('/entity/')) return entity(request, url, env, ctx);
-    const render = url.pathname === '/' ? searchPage : url.pathname === '/about' ? aboutPageOf : null;
+    if (url.pathname === '/about') {
+      try {
+        const [site, usage] = await Promise.all([siteOf(env), usageOf(env)]);
+        return html(aboutPageOf({ ...site, ...usage }));
+      } catch (e) {
+        console.log(JSON.stringify({ event: 'upstream_error', message: String(e) }));
+        return json(502, { error: { code: 'upstream' } });
+      }
+    }
+    const render = url.pathname === '/' ? searchPage : null;
     if (!render) return json(404, { error: { code: 'not_found' } });
     try {
       return html(render(await siteOf(env)));
@@ -244,12 +254,7 @@ async function dailyGate(request, env) {
   const ipHash = (await sha256hex(`${env.IP_HASH_SALT}|${ip}`)).slice(0, 32);
   const now = new Date();
   const day = now.toISOString().slice(0, 10);
-  // D18: the object's home is fixed by its first access, so it is created
-  // under a North-America hint rather than wherever the first visitor was.
-  // The name carries the region so that a wrongly-homed object cannot be
-  // reused by accident (the first `site` object was homed in Singapore).
-  const gate = env.DAILY_GATE.get(env.DAILY_GATE.idFromName('site-wnam'),
-                                  { locationHint: 'wnam' });
+  const gate = gateStub(env);
   const { allowed } = await gate.admit({
     day, ipHash, country: request.cf?.country, asn: request.cf?.asn });
   if (allowed) return null;
@@ -258,6 +263,31 @@ async function dailyGate(request, env) {
   return json(429,
     { error: { code: 'daily_limit', layer: 'daily', retry_after: retryAfter } },
     { 'Retry-After': String(retryAfter) });
+}
+
+/** The one gate object.  D18: its home is fixed by its first access, so it is
+ * created under a North-America hint rather than wherever the first visitor
+ * was, and the name carries the region so that a wrongly-homed object cannot be
+ * reused by accident (the first `site` object was homed in Singapore). */
+const gateStub = (env) =>
+  env.DAILY_GATE.get(env.DAILY_GATE.idFromName('site-wnam'), { locationHint: 'wnam' });
+
+/** The two numbers the about page prints (ruled 2026-08-25: searches only, no
+ * count of people — that would need addresses kept beyond the two days §14
+ * promises).  A failure here must not cost the page: the about page is worth
+ * more than its statistics, so both fall back to an em dash. */
+const RECENT_DAYS = 30;
+
+async function usageOf(env) {
+  try {
+    const since = new Date(Date.now() - (RECENT_DAYS - 1) * 86400000)
+      .toISOString().slice(0, 10);
+    const { total, recent } = await gateStub(env).usage({ sinceDay: since });
+    return { searches_total: thin(total), searches_recent: thin(recent) };
+  } catch (e) {
+    console.log(JSON.stringify({ event: 'usage_unavailable', message: String(e) }));
+    return { searches_total: '—', searches_recent: '—' };
+  }
 }
 
 function secondsToUtcMidnight(now) {

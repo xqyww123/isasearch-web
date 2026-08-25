@@ -11,6 +11,8 @@
     <tr><th>Entities</th><td>{{entities}}</td></tr>
     <tr><th>Index built</th><td>{{built}}</td></tr>
     <tr><th>Embedding model</th><td>{{model}}</td></tr>
+    <tr><th>Searches answered</th><td>{{searches_total}}</td></tr>
+    <tr><th>Searches in the last 30 days</th><td>{{searches_recent}}</td></tr>
   </table>
 
   <div class="section">
@@ -37,9 +39,8 @@
   </div>
 
   <div class="section">
-    <span class="section-label">Limits and what is recorded</span>
+    <span class="section-label">Limits</span>
     <p>Each network address may make 1&#8239;000 searches per UTC day, and 5 within any 10 seconds. One search is one press of the search button: turning a page of results does not count, and editing a condition costs nothing until you search again.</p>
-    <p>To count searches, Isasearch keeps a salted hash of your network address for the current day and the day before, together with the country and the network it belongs to. The address itself is not stored, and the query text is not stored with it.</p>
   </div>
 
   <div class="section">

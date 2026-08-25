@@ -1008,19 +1008,20 @@ The two paragraphs of §3.5 verbatim, then:
 
 (The first sentence *new*; the rest §4.2, D30.)
 
-**Limits and what is recorded**
+**Limits**
 
 > Each network address may make 1 000 searches per UTC day, and 5 within any 10
 > seconds. One search is one press of the search button: turning a page of
 > results does not count, and editing a condition costs nothing until you search
 > again.
->
-> To count searches, Isasearch keeps a salted hash of your network address for
-> the current day and the day before, together with the country and the network
-> it belongs to. The address itself is not stored, and the query text is not
-> stored with it.
 
-(First paragraph §7; second *new*.)
+(§7. The section was called "Limits and what is recorded" and carried a second
+paragraph — "To count searches, Isasearch keeps a salted hash of your network
+address for the current day and the day before, together with the country and
+the network it belongs to. The address itself is not stored, and the query text
+is not stored with it." — **deleted 2026-08-25 by the user**: the page does not
+describe its own bookkeeping. What the site stores is unchanged by the deletion;
+it is simply not written on the page.)
 
 **Authors**
 
