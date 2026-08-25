@@ -707,3 +707,31 @@ deploy uploads site/app/public). Then live re-test: `/`, `/about`, one
 `/entity/…`, a search from the page. Still owed before "shipped": COPY draft 4
 + §14 reader testing (§13b); sitemaps (§9.4, 1.34 M URLs). `worker/.dev.vars`
 exists locally for `wrangler dev` — delete when done.
+
+## NEXT ACT (post-compact #4, 2026-08-25): READER TESTING OF THE COPY, THEN DEPLOY — user's explicit go
+
+State: front end built, browser-verified, committed and pushed (5aea8e0).
+NOT deployed. The user ruled the order: reader testing (§13b) → user's
+final approval of site/COPY.md → `wrangler deploy` (user runs it with `!`:
+`cd worker && source ~/Current/MLML/secret.sh && npx wrangler@4 deploy`)
+→ live re-test of /, /about, one /entity/…, one search → delete
+worker/.dev.vars (a local `wrangler dev` on :8787 may still be running;
+kill by PID, never `pkill -f wrangler`).
+
+Reader testing, how (§13b, done three times before — see COPY.md §12 for
+what each round changed): several independent subagents, each given ONLY
+the visitor-facing text (COPY.md's quoted blocks — §2, §3, §4, §5, §6, §7,
+§8, §14 about page — not the commentary), answering a fixed set of
+questions (what the site does / cannot do; what `sorted` matches; does
+`sort` match `sorted_wrt`; what an empty kind selection means; what a Theory
+Name condition does on a theorem; what the daily limit counts; who wrote the
+explanations), plus one skeptic hunting contradictions and undefined terms.
+Report in Chinese; the user approves COPY.md verbatim; then deploy.
+
+Open observation for the user: under the collapse golden standard, two AFP
+entries carrying the same theory file (Separation_Logic_Imperative_HOL and
+Van_Emde_Boas_Trees, Syntax_Match.thy) yield two identical-looking cards,
+told apart only by the source link. Default: keep as is.
+
+Later: sitemaps (§9.4) with the Q13 re-export (`_`/`.` as tokens, tests the
+one-command pipeline); post-deploy code review; usage-stats endpoint.
