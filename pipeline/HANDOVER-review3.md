@@ -628,3 +628,56 @@ via the user's CLOUDFLARE_GOD_KEY — the classifier blocks me from minting/
 deploying/putting secrets, so those commands are run by the user with `!`).
 Owed: user click-through; latency re-measure after Smart Placement settles
 (1.4–2.5 s/search from SG in the first hours); republish must purge zone cache.
+
+## NEXT ACT (post-compact #3, 2026-08-25): BUILD THE FRONT END (§12.2 step 6, phase two, D32) — user's explicit go
+
+State at compact: backend fully live at https://isabelle-semantics.qiyuan.me
+(commits through 9f1216b, pushed; work tree clean; Smart Placement hint wnam →
+remote-LAX, 1.0–1.7 s/search from SG; user click-through of source links
+PASSED; one-shot cron 8-26 09:23 re-measures latency, session-only).
+
+Inputs (read these first, in this order):
+1. site/COPY.md — THE source of every visitor-facing string (§0–§9; §10 lists
+   what is deliberately unwritten). The mockup follows it, never the reverse.
+   Standing conditional: draft 4 owes a reader-testing pass (plan §13b) before
+   FINAL approval — raise before the front end ships, not before starting.
+2. site/design/IsaSearch.dc.html (+ support.js, the Claude Design runtime, not
+   edited) — the settled mockup: landing (search box, checkbox labelled with
+   the user's BM25 sentence, "Filters" panel group with five panels + Kind
+   buttons, none selected by default), result list (20/page, "previous 20 ·
+   next 20", "Showing results 1 to 20"/"Showing all «n» results", no totals,
+   no scores, no timing), cards, expanded explanation, theory line (D26),
+   §4.6 "was read as" notice, empty states, entity page sketch. Rule §9.1b:
+   replicate its own styles; design nothing new. Turning it into a real page
+   means REPLACING support.js's data-binding with real fetch + rendering —
+   ask the user whether the front end is (a) a static HTML+JS page served by
+   the Worker at `/`, or (b) generated; plan §9.5 says server-rendered from
+   the Worker, no framework.
+3. worker/README.md — the API contract (POST /api/search body + response:
+   results cards, limit_reached, parts, matched_theories; error codes). The
+   Worker has NO `/` route and NO entity-page route yet: both are front-end
+   work and land in worker/src/index.js.
+4. Plan §9 (9.1 layout, 9.2 the literal-matching education, 9.2b D15 amber
+   sentence, 9.3 fonts — subset IsabelleDejaVu to WOFF2 + live `==>`→`⟹`
+   replacement for unambiguous abbrevs only, from etc/symbols `abbrev:`
+   fields; 9.4 entity pages one per `group` at a stable URL — URL scheme NOT
+   yet chosen, ask; sitemaps sharded 50k, ordered distribution-first then
+   AFP, name-addressed before theorem-alike; related entities from the ten
+   nearest vectors; 9.5 server-rendered), D25 (entity pages ship in the first
+   release; cards link to them from day one), D30 disclosure text, D42 absent
+   source-link form, D48 no numbers.
+5. DEFERRED, must fix before shipping: theoryCaveat (D15 amber sentence)
+   trigger under the empty-kinds default — correct predicate is (kinds empty
+   OR includes a theorem-alike) AND (a condition reaches Theory Name directly
+   or via All); mockup line ~894 uses st.kinds.some(...) which is false when
+   empty. Needs a COPY §3.4 sentence? — raise with the user.
+6. Entity page needs a Worker query by `group` (filter ['group','Eq',g],
+   attributes incl. interpretation, all kinds of the group) + related
+   entities (vector ANN with the entity's own vector — vectors are not
+   returned by include_attributes; needs a design: re-embed the
+   interpretation? or store? ASK the user; §9.4 says "ten nearest vectors").
+
+Discipline unchanged: commit/push only on the user's word; no coined words;
+user-visible copy verbatim from COPY.md or user-approved; ask before any
+design deviation; deploy/secret commands are run by the user with `!` (the
+classifier blocks me); never `isabelle build`.
