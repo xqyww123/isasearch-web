@@ -121,7 +121,16 @@ export function sourceText(sourceLink) {
 // The published source page of a theory, named exactly as the theory is
 // (`HOL.Finite_Set` → `/source/HOL.Finite_Set.html`).  Verified live 2026-08-25
 // for distribution, AFP and `Pure` alike.
-export const theoryHref = (theory) => `/source/${encodeURIComponent(theory)}.html`;
+//
+// NOT percent-encoded, and that is the point: `serveSource` (worker/src/index.js)
+// uses the undecoded path as the R2 key, so an encoded name looks up a key no
+// object has.  `encodeURIComponent` was here until 2026-08-25 and escaped the `+`
+// of the 29 `CoreC++.*` names to `%2B`, 404ing every one of their chips while the
+// unescaped URL served 200.  Published theory names use letters, digits, `+`, `-`,
+// `.` and `_` and nothing else (all 9,784 counted) — every one a literal in a path
+// segment.  A name needing escapes would have to be escaped at publish time too,
+// on the file, so it is the publish gate's business and never this line's.
+export const theoryHref = (theory) => `/source/${theory}.html`;
 
 // ---- fragments ------------------------------------------------------------------
 
