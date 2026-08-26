@@ -112,9 +112,26 @@ export const entityHref = (card) =>
 // instead would mean guessing the session from a directory path
 // (`~~/src/HOL/Probability/…` is session `HOL-Probability`, not `HOL.Probability`),
 // and a guessed name that does not exist is worse than none.
-export function sourceText(sourceLink) {
-  const m = /^\/source\/(.+?)\.html(?:#L(\d+))?$/.exec(String(sourceLink ?? ''));
-  if (!m) return String(sourceLink ?? '');
+// Positions inside an Isabelle/ML file are published under this prefix (§17.2),
+// where the path is the symbolic file path with `$AFP`/`~~` spelled out as
+// directories — NOT a theory long name.  A theory long name can never collide
+// with it: theory names carry no `/`, so `/source/_aux.html` cannot match a
+// `/source/_aux/` prefix.
+const AUX_PREFIX = '/source/_aux/';
+
+export function sourceText(card) {
+  const link = String(card?.source_link ?? '');
+  // The `.ML` branch (COPY §4.4, approved 2026-08-26).  Reassembling the symbolic
+  // path out of the published one would put a second, unchecked copy of §17.2's
+  // `$AFP`↔`AFP/`, `~~`↔`ISABELLE_HOME/` correspondence in this file; the record's
+  // own `position` is already the string these cards should print, so it is
+  // printed verbatim.  Falling through when it is empty is deliberate: an empty
+  // string would render the anchor invisible, which is worse than the old wrong
+  // text.  (No published row is in that state — all 9,599 rows with no position
+  // have no link either — so the fallback has never been reached.)
+  if (link.startsWith(AUX_PREFIX) && card?.position) return card.position;
+  const m = /^\/source\/(.+?)\.html(?:#L(\d+))?$/.exec(link);
+  if (!m) return link;
   return m[2] ? `${m[1]}.thy:${m[2]}` : `${m[1]}.thy`;
 }
 
@@ -146,7 +163,7 @@ export const similarityText = (card) =>
 
 export function sourceLink(card, verbose = false) {
   if (card.source_link) {
-    const a = `<a class="mono" href="${esc(card.source_link)}" title="${esc(COPY.sourceHover)}">${esc(sourceText(card.source_link))}</a>`;
+    const a = `<a class="mono" href="${esc(card.source_link)}" title="${esc(COPY.sourceHover)}">${esc(sourceText(card))}</a>`;
     return verbose ? `This entity was produced by the command at ${a}.` : a;   // §8 / §4.4
   }
   return verbose

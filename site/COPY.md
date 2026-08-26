@@ -435,7 +435,11 @@ when the condition sits in All and meaningless when it excludes.)*
 
 ### 4.4 The source link
 
-Present on about four cards in five (D42, coverage 80.2 %). **Its text is the
+Present on nearly every card (D42, coverage **99.28 %** — 9,599 of the 1,337,009
+published rows carry no position). *(This paragraph said "about four cards in
+five (coverage 80.2 %)" until 2026-08-26. That was the figure from before
+`ENTITY_POSITION_PLAN.md`'s backfill; the plan has carried 99.28 % since, at
+§11.1 and again in §17.5's reported figures.)* **Its text is the
 theory's full name with the line** (changed 2026-08-25; §4.1 records why, and
 where the name is read from). A substitution slot like every other run-time
 value; draft 3 wrote it bare, which reads as a claim about a real line of a real
@@ -443,7 +447,27 @@ file and was challenged as such:
 
 > «HOL-Computational_Algebra.Primes.thy»:«525»
 
-Hover:
+**A position inside an Isabelle/ML file names no theory**, so its text is that
+file's own symbolic path with the line (approved 2026-08-26). 7,292 cards,
+0.55 %, across 26 `.ML` files:
+
+> «$AFP/AutoCorres2/utils.ML»:«123»
+> «~~/src/HOL/Nominal/nominal_thmdecls.ML»:«175»
+
+`$AFP` and `~~` are Isabelle's own spellings for the AFP tree and the
+distribution root, and they are already exactly what the record's stored
+position says, so the slot prints it unchanged rather than reassembling it. The
+file's base name alone was rejected: `nominal_thmdecls.ML` is two different
+files — `$AFP/Nominal2/` and `~~/src/HOL/Nominal/` — and one live query returns
+both at once, which would put two files under one name on one screen.
+
+*(Until 2026-08-26 these cards ran the published page's path through the theory
+form above, printing `_aux/AFP/AutoCorres2/utils.ML.thy:123` — leaking `_aux/`,
+an internal directory of the published tree, and appending `.thy` to a `.ML`
+file so that it read as a theory that does not exist. The link itself was
+correct throughout; only the text was wrong.)*
+
+Hover, both forms:
 
 > The command that produced this entity. Many entities come from a command such
 > as `datatype` or `fun` rather than from an explicit declaration, so the line
