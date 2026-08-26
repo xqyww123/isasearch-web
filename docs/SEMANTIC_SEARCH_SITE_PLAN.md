@@ -3887,13 +3887,28 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   of documents, so this is a hot path. `?` is not among them at the subtoken level: D4
   strips it before subtokens are formed (measured, 0 occurrences).
 
-  **Measured cost.** Against namespaces of 100,000 and 400,000 real records: glob is
-  the same order as today's `ContainsTokenSequence` and sometimes cheaper (weak-anchor
-  case 47/30 ms against 57/38 ms), and a deliberately pathological `*a*` was the
-  *fastest* filtered query of the eight (37/25 ms), which is what rules out a linear
-  scan. Nothing grew from 100k to 400k. Caveat: those namespaces used 64-dimension
-  proxy vectors, so the absolute figures are not production's and the ANN interaction
-  was not exercised. Storage: the three columns are ~280 MB against a namespace whose
+  **Measured cost — and the first reading of it was wrong.** A 2026-08-26 measurement
+  on namespaces of 100,000 and 400,000 records concluded that glob "is the same order
+  as `ContainsTokenSequence` and sometimes cheaper", and that a pathological `*a*`
+  being the fastest of eight queries "rules out a linear scan". **It does not.** Those
+  figures were all taken on the **ANN leg** — `rank_by ["vector","ANN",v]` with
+  `top_k` — where no mechanism exceeded 49 ms at any size and the filter type is very
+  nearly invisible. Isolating the filter with `aggregate_by {"n":["Count","id"]}`, which
+  evaluates it against every row, shows `Glob` and `Regex` scaling **linearly in row
+  count** — they are scans — while `ContainsTokenSequence` stays flat on a single
+  literal. At 1,200,000 rows the weak literal `+` costs 9 ms under
+  `ContainsTokenSequence`, **1,977 ms under `Glob` and 1,198 ms under `Regex`**, and
+  ~88 ms under either when conjoined with the literal runs. Extrapolated to
+  production's 1,337,009: `Glob` alone ~2.2 s, `Regex` alone ~1.3 s, narrowed ~98 ms.
+  A rare anchor is free at any size (an unmatched pattern is 10 ms over 1.2M rows —
+  Rust's literal prefilter), so it is the *common* literal that hurts.
+
+  Two lessons worth keeping: a filter-only query with `rank_by ["id","asc"]` early-exits
+  at `top_k` and understates weak-literal cost by an order of magnitude, so
+  `aggregate_by` is the only clean exhaustive metric; and `Regex` is consistently
+  **~1.6× cheaper than `Glob`**, which inverts this section's earlier framing of glob as
+  the safe option. One column declared `{"type":"string","glob":true,"regex":true}` is
+  accepted and serves both, so the export need not choose a dialect. Storage: the three columns are ~280 MB against a namespace whose
   11.0 GB of 11.5 GB is vectors — **2.4 %**, so the binding constraint is not bytes but
   §8.2, which makes a column omitted now cost a full re-export to add.
 
@@ -3925,6 +3940,36 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   subtokens escape to valid patterns (a 96,275-character alternation was accepted). The
   narrowing that the warning itself sanctions is free here, because a wildcard pattern's
   literal runs are **logically implied by** the regex and so cannot change the result set.
+
+  **The literal-run narrowing is a CORRECTNESS requirement, not an optimisation.**
+  This is the one finding nobody predicted and the one an implementer must not drop.
+  Bare `Glob` and bare `Regex` **silently return far fewer rows than `top_k`** as the
+  namespace grows: at 1.2M rows the condition `x + y` (2,831 true matches) returned
+  **41 of 200**, at 400k it returned 97, at 100k it was fine — and `ContainsTokenSequence`
+  returned a full 200 at every size. The rows returned are all genuine; there are just
+  far too few of them, with nothing to signal it. It is **not a clean function of
+  selectivity**: `finite _ set` at 0.267 % was unaffected while `x + y` at 0.236 % was,
+  and `x + y` itself ranged from 62 to 200 rows depending only on the query vector — so
+  it turns on where the matching rows sit in embedding space, which makes it
+  unpredictable rather than a threshold anyone could design around. Conjoining the
+  pattern's literal runs restored 200 of 200 in every case measured, and cannot change
+  the answer because the runs are logically implied by the pattern — verified, all five
+  mechanisms agreed on the exact ground-truth id set for every condition in every
+  namespace. **So the compiled filter is always
+  `And([ContainsTokenSequence(run₁), …, Regex(pattern)])`, never the pattern alone.**
+
+  **The 4 KiB filterable-value limit does not apply** (measured 2026-08-26, closing this
+  question): a `{"type":"string","glob":true,"regex":true}` column accepted a
+  **62,891-byte** value, stored it whole and matched patterns anchored at its head,
+  middle and tail. Namespace metadata reports such a column as `filterable: false`,
+  the same "different storage path" signature `pre_tokenized_array` shows. The corpus
+  maximum of 6,427 subtokens is ~35 KB, comfortably inside.
+
+  **Two spellings that are silently wrong.** In turbopuffer's regex **`.` does not cross
+  `\n`** — `\nf\n.*\nx\n` matches nothing at all — so the gap must be spelled
+  `(?:[^\n]+\n)+` or `(?s:.)*`; both were measured identical in count and cost. And
+  `Regex` is a substring search, not a full match, so it needs no outer anchor, unlike
+  `Glob`, which does need its leading and trailing `*`.
 
   **Still open**: whether Q13 rides with it; the lexing rule for `_` (whitespace-
   delimited only, or any separator); what a condition consisting only of wildcards
