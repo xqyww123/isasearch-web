@@ -30,13 +30,13 @@ import time
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(_HERE, '..')))               # the prototype
-sys.path.insert(0, os.path.normpath(os.path.join(_HERE, '..', '..', '..')))   # the package
+sys.path.insert(0, os.path.normpath(os.path.join(_HERE, '..', '..', 'tokenizer')))  # the tokenizer
 
 import zstandard
 
-from Isabelle_Semantic_Embedding.isabelle_tokenizer import Tokenizer
+from isabelle_tokenizer import Tokenizer          # site/tokenizer/, since 2026-08-26
 from Isabelle_Semantic_Embedding.semantics import Semantic_DB
-from Isabelle_Semantic_Embedding import tokenizer_asset
+import tokenizer_asset                            # site/tokenizer/, since 2026-08-26
 import subtoken_rule
 import tokenize_prototype as P
 from Isabelle_RPC_Host import unicode as unicode_module

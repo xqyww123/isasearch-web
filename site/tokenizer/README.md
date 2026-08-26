@@ -64,17 +64,28 @@ and no query can ever match. Every loop here iterates code points, and the fold 
 
 ## Running the gate
 
+Run from this directory, except the pytest, which is repo-relative:
+
 ```
-python3 emit.py --check            # the Python implementation against the digest
-python3 -m pytest ../../test_isabelle_tokenizer.py
-node emit.mjs --check              # the port against the same digest
-node test_tokenizer.mjs            # the refusals
+python3 emit.py --check                          # the Python implementation, against the digest
+python3 -m pytest ../../tests/test_isabelle_tokenizer.py
+node emit.mjs --check                            # the port, against the same digest
+node test_tokenizer.mjs                          # the refusals
 ```
 
-None of these needs Isabelle, the semantic database, or the rest of the package
-installed — which is the same property §5.5 requires of the tokenizer itself, and a
-gate that needed the Isabelle stack would contradict what it gates.
+None of these needs Isabelle, the semantic database, or anything installed — which is
+the same property §5.5 requires of the tokenizer itself, and a gate that needed the
+Isabelle stack would contradict what it gates.
 `.github/workflows/tokenizer-gate.yml` runs all four.
+
+**Both implementations live here, side by side** (`isabelle_tokenizer.py` and
+`isabelle_tokenizer.js`), with the asset they read, the frozen inputs and digest that
+hold them to each other, and the two drivers that check them. They were split across
+two repositories until 2026-08-26 — the Python half in the
+`Isabelle_Semantic_Embedding` package — and the 2026-08-24 repository split left each
+half of the gate looking for the other across the boundary, so **the Python half of
+this gate did not run for two days and nobody could have noticed**. Keeping the pair
+in one directory is what makes that failure unavailable rather than merely unlikely.
 
 When a digest moves and you want to know **which** input moved:
 

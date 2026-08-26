@@ -39,10 +39,10 @@ import sys
 import unicodedata
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.normpath(os.path.join(_HERE, '..', '..')))
+sys.path.insert(0, _HERE)
 
-from Isabelle_Semantic_Embedding import tokenizer_asset
-from Isabelle_Semantic_Embedding.semantics import Semantic_DB
+import tokenizer_asset                                   # this directory, since 2026-08-26
+from Isabelle_Semantic_Embedding.semantics import Semantic_DB   # the installed package
 
 STORE_DIGEST = 'a2dbbb874fe178867dd07bc05901fc96'      # §3's preamble
 TARGET_EXPRESSIONS = 10000                             # §16.5's floor, unchanged

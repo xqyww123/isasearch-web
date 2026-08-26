@@ -14,11 +14,11 @@ import sys
 import time
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.normpath(os.path.join(_HERE, '..', '..', '..')))
+sys.path.insert(0, os.path.normpath(os.path.join(_HERE, '..', '..', 'tokenizer')))
 
-from Isabelle_Semantic_Embedding.isabelle_tokenizer import Tokenizer
+from isabelle_tokenizer import Tokenizer          # site/tokenizer/, since 2026-08-26
 from Isabelle_Semantic_Embedding.semantics import Semantic_DB
-from Isabelle_Semantic_Embedding import tokenizer_asset
+import tokenizer_asset                            # site/tokenizer/, since 2026-08-26
 
 FIELDS = ('expr', 'name')
 

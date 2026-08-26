@@ -2189,7 +2189,19 @@ include/exclude toggle — because both let a user enter two conditions.
 ### 5.5 The two implementations
 
 The site export runs the Python implementation; the Worker runs a JavaScript
-port. To stop them drifting:
+port.
+
+**Both live in `site/tokenizer/`, side by side** — with the asset they read, the
+frozen inputs and digest that hold them to each other, and the two drivers that check
+them. The Python half sat in the `Isabelle_Semantic_Embedding` package until
+2026-08-26. The 2026-08-24 repository split then left the gate's two halves in
+different checkouts, each computing a path to the other that no longer existed, and
+**the Python half of the gate did not run for two days** — silently, because a gate
+that cannot start looks exactly like a gate with nothing to report. The site is the
+tokenizer's only consumer, so the pair came here; keeping them in one directory makes
+that failure unavailable rather than merely unlikely.
+
+To stop them drifting:
 
 - **One asset, emitted at export time, read by both** (D45). It carries the
   symbol table, the fold table, the letter / digit / quasi-letter /
@@ -4215,7 +4227,8 @@ day. The apparatus around steps 1 and 3 to 5 was rebuilt on 2026-08-20 after an
 adversarial review — §16.5 and §16.6 say what it is now and what the previous shape
 failed to enforce.
 
-1. **`Isabelle_Semantic_Embedding/isabelle_tokenizer.py`** — the production
+1. **`site/tokenizer/isabelle_tokenizer.py`** (in the `Isabelle_Semantic_Embedding`
+   package until 2026-08-26 — see §5.5) — the production
    Python implementation, lifted from `site/prototype/` and changed in **two**
    respects, not the one an earlier draft of this step claimed:
    **(i)** it reads its character classes and its two tables from the emitted asset
@@ -4319,7 +4332,7 @@ failed to enforce.
    **Done, 2026-08-20.** The export exists (§8.1) and emits the asset; what it builds
    on this machine is byte-identical to the committed `site/tokenizer/asset.json`,
    digest `9f86eadd64f0…`, and the corpus comparison of step 1 has not moved.
-   `Isabelle_Semantic_Embedding/tokenizer_asset.py`
+   `site/tokenizer/tokenizer_asset.py`
    builds the asset and every one of the four conditions above is met and tested:
    `test_isabelle_tokenizer.py` loads the tokenizer module by path with
    `Isabelle_RPC_Host` and `Isabelle_Semantic_Embedding` blocked from the import system

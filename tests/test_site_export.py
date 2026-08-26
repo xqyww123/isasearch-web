@@ -194,8 +194,8 @@ _ASSET = {"tokenizer_rule": 1, "symbol_files": [{"name": "etc/symbols", "sha256"
 
 
 def _committed(asset):
-    from Isabelle_Semantic_Embedding import tokenizer_asset
-    text = tokenizer_asset.serialize(asset)
+    from site_export import _import_from_tokenizer_dir
+    text = _import_from_tokenizer_dir("tokenizer_asset").serialize(asset)
     import hashlib
     return text, hashlib.sha256(text.encode("utf-8")).hexdigest()
 

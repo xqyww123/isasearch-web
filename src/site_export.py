@@ -459,13 +459,36 @@ def completeness_gate(get_vector) -> int:
 # §8.1 step 6 and §8.2 — the asset, the component guard, the namespace name
 # ---------------------------------------------------------------------------
 
+def tokenizer_dir() -> str:
+    """`site/tokenizer/`, which since 2026-08-26 holds the whole tokenizer: both
+    implementations, the asset they read, the frozen inputs and digest that hold them
+    to each other, and the two drivers that check them.  They lived in the
+    `Isabelle_Semantic_Embedding` package until the 2026-08-24 repository split left
+    the gate's two halves in different checkouts, unable to find one another; the site
+    is their only consumer, so they came here."""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "site", "tokenizer")
+
+
+def _import_from_tokenizer_dir(name: str):
+    """Import a module out of `site/tokenizer/` without making that directory a
+    package.  It is not one on purpose: the CI gate loads the same files with neither
+    Isabelle nor this repository installed (§16.6), so nothing there may depend on an
+    import root."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        name, os.path.join(tokenizer_dir(), f"{name}.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def committed_asset_path() -> str:
     """Where the previous export's asset is, which is also where the CI gate and the
     JavaScript port read theirs (§16.6).  One file, so the invariant that makes the
     comparison meaningful — the committed asset is the deployed asset — needs no
     second declaration to keep in step."""
-    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        "site", "tokenizer", "asset.json")
+    return os.path.join(tokenizer_dir(), "asset.json")
 
 
 def asset_differences(committed_text: str, asset: dict, digest: str) -> 'list[str]':
@@ -506,7 +529,7 @@ def emit_asset(path: str, *, change_intended: bool) -> 'tuple[dict, str, str]':
 
     The `tokenizer_rule` comparison is the one that catches a rule change: a rule
     that touches no table leaves the file list and the digest alone."""
-    from Isabelle_Semantic_Embedding import tokenizer_asset
+    tokenizer_asset = _import_from_tokenizer_dir("tokenizer_asset")
     asset = tokenizer_asset.build_asset()
     text = tokenizer_asset.serialize(asset)
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -906,7 +929,7 @@ def run(*, isabelle_home: str, afp_dir: str, committed_asset: str,
         no_source_links: bool = False) -> str:
     """§8.1 end to end.  Returns the namespace that was written."""
     import contextlib
-    from Isabelle_Semantic_Embedding import isabelle_tokenizer
+    isabelle_tokenizer = _import_from_tokenizer_dir("isabelle_tokenizer")
 
     # The artefact is resolved FIRST — a pure local read, before the asset
     # comparison, the API key, the separator probe's live upsert and the

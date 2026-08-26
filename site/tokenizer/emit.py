@@ -41,17 +41,20 @@ def one_line(text):
 
 
 def load_tokenizer_module():
-    """By path, never by package name.
+    """By path, from this very directory, never by package name.
 
-    `Isabelle_Semantic_Embedding/__init__.py` imports `premise_selection`, which needs
-    `Isabelle_RPC_Host`, published to conda and not to PyPI — so a plain import is not
-    available where this has to run. It was once a fallback after a `try:`, and that
-    made the gate test the INSTALLED copy on a developer's machine and the working
-    tree in CI: with a non-editable install, a broken working-tree tokenizer produced
-    a green gate. One subject, always.
+    The subject sits beside this file (it moved here 2026-08-26, with the rest of the
+    tokenizer), so there is no installed copy for the gate to test by accident. That
+    accident is why the rule is written down: the load was once a fallback after a
+    `try:`, which made the gate test the INSTALLED copy on a developer's machine and
+    the working tree in CI — with a non-editable install, a broken working-tree
+    tokenizer produced a green gate. One subject, always.
+
+    By path rather than by import also keeps the gate runnable with nothing installed
+    at all, which §16.6 requires of it: a gate that needed the Isabelle stack would
+    contradict the property it is gating.
     """
-    path = os.path.normpath(os.path.join(
-        _HERE, '..', '..', 'Isabelle_Semantic_Embedding', 'isabelle_tokenizer.py'))
+    path = os.path.join(_HERE, 'isabelle_tokenizer.py')
     spec = importlib.util.spec_from_file_location('isabelle_tokenizer', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -102,7 +105,7 @@ def check(directory=_HERE):
             "the tokenizer's output over the committed inputs hashes to %s, "
             "expected.json says %s.\n"
             "      The behaviour moved. If a rule of §5.1, §5.2 or §5.4 changed, bump "
-            "TOKENIZER_RULE in Isabelle_Semantic_Embedding/tokenizer_asset.py in the "
+            "TOKENIZER_RULE in site/tokenizer/tokenizer_asset.py in the "
             "same commit and rebuild the asset -- without that bump the asset's bytes "
             "do not move, so the turbopuffer namespace name does not move, and "
             "§8.2's \"write into a new namespace\" becomes an upsert into the live "

@@ -14,7 +14,7 @@ tree of rendered Isabelle source pages.
 | `src/site_export.py` | Exports the semantic DB into the site's turbopuffer namespace (plan §8). Run as `python src/site_export.py`. |
 | `src/site_source_pages.py` | The source-page pipeline — `scan` / `map` / `publish` / `gate` / `patch` (plan §17). Run as `python src/site_source_pages.py`. |
 | `tests/` | The pytest suites (`python -m pytest tests/`). |
-| `site/` | Interface design (`design/`), the tokenizer asset and its JavaScript port (`tokenizer/`), measurement prototypes (`prototype/`), review archives (`review/`), approved interface copy (`COPY.md`). |
+| `site/` | Interface design (`design/`), the tokenizer — both implementations, the asset, and the gate that holds them to each other (`tokenizer/`), measurement prototypes (`prototype/`), review archives (`review/`), approved interface copy (`COPY.md`). |
 | `pipeline/` | Versioned pipeline state: the continuation/handover file, the scan and map artefacts the live namespace is pinned to, review transcripts, the executed live-patch checkpoint. |
 | `worker/` | The Cloudflare Worker (plan §12.2 step 5): the search API, the daily rate gate, `/source/*` served from the R2 bucket. See `worker/README.md`. |
 | `published/` | The generated published tree (git-ignored, 5+ GB; rebuilt by `python src/site_source_pages.py publish`). |

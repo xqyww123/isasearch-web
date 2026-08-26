@@ -27,16 +27,12 @@ to catch exactly that. **A gate that fails is doing its job.** The one supported
 to move a gate's baseline is `gate --update-counters`, and its diff is reviewed by a
 human before it is committed; nothing else about a failing gate is negotiable.
 
-**Three standing hazards, before anything else.** They are explained where they bite,
-but they decide whether you can start at all, so they are named here:
+**Two standing hazards, before anything else.** They are explained where they bite,
+but they decide how carefully you move, so they are named here:
 
-1. **If this release changes tokenizer rules, stop.** The cross-implementation gate
-   that binds the Python and JavaScript tokenizers to each other has been broken since
-   the 2026-08-24 repository split (step 0). Until it is repaired, a rule implemented
-   in one and not the other ships with no error at all.
-2. **Step 5's upload commands have never been run in this form** against a bucket that
+1. **Step 5's upload commands have never been run in this form** against a bucket that
    already holds a tree. Its dry run is not optional.
-3. **Step 11 deletes namespaces permanently**, and the names are recycled, so the
+2. **Step 11 deletes namespaces permanently**, and the names are recycled, so the
    wrong one looks plausible. It wants a second pair of eyes.
 
 **If you have done this before**, the tick-list immediately below is the whole
@@ -62,9 +58,8 @@ prefix the live site is serving**; **step 11 deletes namespaces permanently**.
 [ ]  0  right host, toolchain, ~5 GB free, DB quiet, keys set (all six), tree clean,
         tests green; RECORD the deployed version, the current TPUF_NAMESPACE,
         and the previous published-tree directory; schema change?
-        tokenizer change? (if tokenizer: the repo-split repair has LANDED,
-        BOTH halves of the gate pass, tokenizer_rule bumped,
-        --asset-change-intended ready)
+        tokenizer change? (if tokenizer: all four gate commands pass,
+        tokenizer_rule bumped, --asset-change-intended ready)
 [ ]  1  scan                       ~30 s
 [ ]  2  map                        ~8 s      → RECORD the content hash
 [ ]  3  publish -> published.<date>          → KEEP the previous tree until the
@@ -151,9 +146,8 @@ on, restated so the steps can be read on their own.
   source-tree step above.
 - **The asset** — `site/tokenizer/asset.json`: the one file pinning the tokenizer's
   character classes, tables, and its `tokenizer_rule` version number. The two
-  tokenizer implementations — the Python one in the `Isabelle_Semantic_Embedding`
-  package and the JavaScript one at `site/tokenizer/isabelle_tokenizer.js` — both
-  read it, which is what keeps stored text and typed queries tokenised alike.
+  two tokenizer implementations — `site/tokenizer/isabelle_tokenizer.py` and
+  `site/tokenizer/isabelle_tokenizer.js`, side by side — both read it, which is what keeps stored text and typed queries tokenised alike.
 - **The sentinel row** — one row in the companion namespace `<namespace>.asset`,
   carrying the asset's SHA-256 and `tokenizer_rule`, and the entity count and build
   date the pages print.
@@ -499,38 +493,10 @@ have a mechanical test, and both have a backstop that catches you if you answer 
 # function name alone would miss two of the three places a column can change shape.
 git diff $LAST..HEAD -- src/site_export.py
 
-# Did the tokenizer change?  Its rules live in TWO repositories, so this takes two
-# commands against two recorded shas — the JavaScript half here...
+# Did the tokenizer change?  Both implementations, the asset they read and the gate
+# that binds them all live in site/tokenizer/, so this one command is the whole answer.
 git diff --stat $LAST..HEAD -- site/tokenizer/
-# ...and the Python half in its own checkout, a separate git repository:
-# `git diff -- ../Semantic_Embedding/...` from here is `fatal: outside repository`.
-SE=~/Current/MLML/contrib/Semantic_Embedding
-LAST_SE=<the Semantic_Embedding sha from the log>
-git -C $SE log --oneline $LAST_SE..HEAD -- \
-  Isabelle_Semantic_Embedding/isabelle_tokenizer.py \
-  Isabelle_Semantic_Embedding/tokenizer_asset.py
-git -C $SE rev-parse --short HEAD        # record this one for the next release
 ```
-
-**If the log carries no Semantic_Embedding sha** — and the first release run under this
-document will not have one — you cannot bound that half by commit range. That is not an
-automatic stop; bound it the other two ways, which between them cover both
-implementations:
-
-- **The JavaScript side is fully covered by this repository.** `git diff $LAST..HEAD --
-  site/tokenizer/` above is exact, because that is where the port lives.
-- **The Python side is covered by the asset.** The asset is built *from* the Python
-  implementation's tables and its `TOKENIZER_RULE`, and step 6 recomputes it from the
-  installed package and **stops** unless it matches the committed one. A Python-side
-  change to any table, or any bumped `tokenizer_rule`, therefore cannot get past step 6
-  unnoticed.
-- As a date-bounded cross-check: `git -C $SE log --since=<the previous release's date>
-  -- Isabelle_Semantic_Embedding/` shows what moved there in the interval.
-
-What none of this covers is the one case the gate exists for: **a rule changed in one
-implementation and not the other, with no table and no `tokenizer_rule` bump**. That is
-unreachable by inspection, it is why the repair matters, and it is the only reading
-under which "possibly changed" becomes hazard 1's stop.
 
 A schema change means the full pass and never a code-only release (see *Smaller
 releases*); its backstop is brutal — a Worker asking for a column the namespace lacks
@@ -540,47 +506,27 @@ the asset and **stops** if it differs from the committed one, so a tokenizer cha
 failed to notice cannot silently ship. What the backstop cannot catch is a rule changed
 in one implementation only, which is what the gate is for.
 
-**If the tokenizer changed, run the tokenizer gate.** It is what holds the two
-implementations to each other (§16.6), and neither `pytest tests/` nor `node --test
-worker/test` runs any part of it. `site/tokenizer/README.md` documents it as four
-commands; **only these two work today** (see the gap below). `emit.mjs --check` ends in
-`<N> inputs, 0 problems`, `test_tokenizer.mjs` ends in `all passed`, and both exit 0:
+**If the tokenizer changed, run the tokenizer gate.** It is the only thing that holds
+the two implementations to each other (§16.6). Precondition 6's `pytest tests/` covers
+one of its four commands — `tests/test_isabelle_tokenizer.py`, 71 cases — and nothing
+covers the other three, so run them explicitly. None needs Isabelle or the database:
 
 ```bash
-(cd site/tokenizer && node emit.mjs --check && node test_tokenizer.mjs)
+(cd site/tokenizer && python emit.py --check && node emit.mjs --check \
+                  && node test_tokenizer.mjs)
+python -m pytest tests/test_isabelle_tokenizer.py -q      # also run by precondition 6
 ```
 
-Then **four** things must be true before you start, and the first is what the hazard
-at the top of this file names: the **repository-split repair has landed and both
-halves of the gate run** — the two JavaScript commands alone cannot see the divergence
-this gate exists to catch, so passing them is not passing the gate. Then
-`tokenizer_rule` was bumped in the same commit as the rule change; the gate passes in
-both halves; and you will pass `--asset-change-intended` in step 6. If `tokenizer_rule` was *not* bumped, stop and
+Both `--check` commands end in `<N> inputs, 0 problems` — **the same N and the same
+underlying digest**, which is the point: one number checked twice, not two reports.
+`test_tokenizer.mjs` ends in `all passed`. All four exit 0.
+
+Then three things must be true before you start: `tokenizer_rule` was bumped in the
+same commit as the rule change; the gate passes; and you will pass
+`--asset-change-intended` in step 6. If `tokenizer_rule` was *not* bumped, stop and
 bump it as a separate commit first — the asset digest is the only thing that makes a
 rule change visible at all (§8.2), and it does not move when a rule changes without
 the bump.
-
-> **Known gap, found 2026-08-26 — the gate's Python half does not run.** The 2026-08-24
-> repository split left the two halves pointing across it: `site/tokenizer/emit.py
-> --check` looks for `<this repo>/Isabelle_Semantic_Embedding/isabelle_tokenizer.py`,
-> and `contrib/Semantic_Embedding/test_isabelle_tokenizer.py` looks for `<that
-> repo>/site/tokenizer/emit.py`. Each needs a file that now lives in the other
-> checkout, and no run directory or environment variable fixes it — the paths are
-> computed from each script's own location. **Repair it before any release that
-> changes tokenizer rules**: with the Python half dark, a rule implemented in one
-> implementation and not the other ships silently, which is the single failure §16.6
-> exists to prevent. A release that leaves the tokenizer alone is unaffected.
->
-> **No invocation works around it** — both paths are computed from each script's own
-> `__file__`, with no flag, environment variable or run directory that redirects them.
-> The repair is a code change: give `emit.py` a way to reach the Python tokenizer
-> through the installed package (`build_inputs.py`, beside it, already does exactly
-> that), and give the test a way to find `emit.py`. The same breakage disables
-> `emit.py --update`, which is the remedy the export's own asset error recommends —
-> see *When something fails*. **Once the repair lands**, the gate's Python half is
-> `python emit.py --check` in `site/tokenizer/` and
-> `python -m pytest test_isabelle_tokenizer.py` in `contrib/Semantic_Embedding/`: add
-> both to the block above and delete this box.
 
 *Protects against:* releasing an unknown commit; discovering a tokenizer divergence
 after the export has been running for hours.
@@ -1271,9 +1217,8 @@ Then:
   running. If either is still uncommitted now, that sha does not — stop and work out
   what was deployed before you record anything.
 - **Append a block to `pipeline/HANDOVER-review3.md`**, this project's release log:
-  the namespace, the artefact content hash, the deployed Worker version, **the commit sha you
-  deployed and the `Semantic_Embedding` sha it was built against** — step 0 of the next
-  release needs both to bound its history — the published-tree directory name, the figures observed at every
+  the namespace, the artefact content hash, the deployed Worker version, **the commit sha you deployed** — step 0 of
+  the next release bounds its history with it — the published-tree directory name, the figures observed at every
   step — including the three timings this document does not yet have — and anything
   that surprised you. Append it at the **end** of the file, so that step 0 of the next
   release finds it where this document says it will be.
@@ -1364,9 +1309,7 @@ that column did, and every export since composes the column itself.
   tokenizer behaves identically — an Isabelle component was registered or
   unregistered here. Refresh the committed asset rather than override the guard:
   `site/tokenizer/build_inputs.py` then `site/tokenizer/emit.py --update`, commit that,
-  and re-run. **`emit.py --update` is broken today** by the same repository split as
-  the tokenizer gate (step 0), so this remedy needs that repair first;
-  `build_inputs.py` is unaffected. **If `tokenizer_rule` or the digest moved**, a rule or a table
+  and re-run. **If `tokenizer_rule` or the digest moved**, a rule or a table
   changed, and `--asset-change-intended` is right *provided* you meant it — and the
   Worker's copy of the asset then has to be deployed with the index, which is step
   8's ordering rule. The error message itself says all this; it is repeated here
