@@ -3849,6 +3849,91 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   old namespace deleted. Cost measured in cents (the $45 above was wrong).
   **Deferred by the user until after the front end ships.**
 
+- **Q14 (2026-08-26, the user's rulings recorded inline)** — **a standalone `_` in a
+  condition means a wildcard matching ONE OR MORE subtokens**, so `f _ x` matches
+  `f (a+b) x` and does not match `f x`. Rides Q13's re-export; not built.
+
+  **Mechanism.** Three new string columns — `name_glob`, `expr_glob`, `theory_glob` —
+  each holding that field's subtokens joined with `\n`, **with a leading and a trailing
+  `\n` as well**; `{"type": "string", "glob": true}`. A condition compiles to a glob
+  pattern: literal runs emit `\n` + escaped subtokens + `\n`, a wildcard emits `*`,
+  and a leading/trailing `*` is added only when the pattern starts/ends with a literal.
+  The boundary sentinels are load-bearing twice over — without them a condition on a
+  record's first or last subtoken cannot be anchored, and "one or more" would degrade
+  to "zero or more".
+
+  **Why "one or more" falls out for free.** Adjacent subtokens share a single `\n`, so
+  `\nf\n*\nx\n` cannot match `\nf\nx\n`: after consuming `\nf\n` only `x\n`
+  remains and the suffix needs three characters. No subtoken is empty and none contains
+  whitespace (measured: 0 of 407,574), which is the invariant this rests on.
+
+  **The user's rulings, 2026-08-26.** All three panels support it, not just Expression
+  (so the `All` panel can still OR the three). Metacharacters are handled by **plain
+  escaping**, not by transliterating them out of the alphabet — "老老实实转义". And
+  **the wildcard does not respect term structure**: it skips subtokens, not balanced
+  subterms, and the user judged the structure-aware alternative too costly for too
+  little ("代价太大，而且能实现的很有限"). That last ruling is what keeps the whole
+  design server-side, since respecting structure was the only thing a Worker-side
+  post-filter could do that a filter cannot — and §6.6 forbids post-filtering.
+
+  **Escaping is safe here because `\` before ANY character is accepted** and means the
+  literal character (measured 2026-08-26 against the live account, for
+  `* ? [ ] { } ! ^ - \` and for ordinary letters). So the rule is a whitelist — escape
+  every character outside `[A-Za-z0-9]` — and needs no enumeration of the
+  metacharacter set, which is what keeps it from rotting when the dialect changes.
+  Order matters: tokenize first, escape each subtoken, then build the pattern by
+  concatenation; the `\n` and `*` we insert are never escaped. An unescaped `[` is an
+  **HTTP 400**, not a zero-result (measured), and glob metacharacters appear in 15.67 %
+  of documents, so this is a hot path. `?` is not among them at the subtoken level: D4
+  strips it before subtokens are formed (measured, 0 occurrences).
+
+  **Measured cost.** Against namespaces of 100,000 and 400,000 real records: glob is
+  the same order as today's `ContainsTokenSequence` and sometimes cheaper (weak-anchor
+  case 47/30 ms against 57/38 ms), and a deliberately pathological `*a*` was the
+  *fastest* filtered query of the eight (37/25 ms), which is what rules out a linear
+  scan. Nothing grew from 100k to 400k. Caveat: those namespaces used 64-dimension
+  proxy vectors, so the absolute figures are not production's and the ANN interaction
+  was not exercised. Storage: the three columns are ~280 MB against a namespace whose
+  11.0 GB of 11.5 GB is vectors — **2.4 %**, so the binding constraint is not bytes but
+  §8.2, which makes a column omitted now cost a full re-export to add.
+
+  **Bracket matching: asked for, measured, then dropped (2026-08-26).** The user asked
+  whether the skipped run could be required to have balanced brackets, so that
+  `f _ x` would reject `f (a x`. **Arbitrary depth is impossible**: turbopuffer's regex
+  is Rust's `regex` crate (identified from its own errors — *"backreferences are not
+  supported"*, *"look-around ... is not supported"*, `(?P<n>…)` accepted), a finite
+  automaton engine, and every recursion extension was rejected in a live test — PCRE
+  `(?R)`, `(?1)`, `(?&p)`, Oniguruma `\g<0>`, .NET balancing groups. Nesting is not a
+  regular language; no engine of this class can do it. **Bounded depth works and was
+  demonstrated**: at depth ≤2 the pattern
+  `\nf\n(?:[^\n()]+\n|\(\n(?:[^\n()]+\n|\(\n(?:[^\n()]+\n)*\)\n)*\)\n)+x\n`
+  correctly accepted every balanced case to depth 2 and rejected `f (a x`, `f a) x` and
+  `f (((a))) x` — the last silently, which is the cost of a bound. **The user then ruled
+  against building it**, so the wildcard stays structure-blind. Recorded because the
+  measurement is what makes "arbitrary depth" a closed question rather than an
+  open one.
+
+  **What decides `Regex` against `Glob`.** With bracket matching dropped the two express
+  the same thing (`\nf\n(?:[^\n]+\n)+x\n` against `*\nf\n?*\nx\n*`), so the choice
+  is one trade-off. `Glob` has measured cost and **no JavaScript library for its dialect**
+  (globset): the intuitive uniform escape `[c]` is wrong — `[!]` and `[^]` are HTTP 400,
+  because `!`/`^` lead a negated class — so it needs either hand-written escaping or the
+  symmetric-encoding scheme, whose table must be identical in Python and JavaScript.
+  `Regex` has **no measured cost** and turbopuffer's explicit warning, but its escaping is
+  a solved problem: `escape-string-regexp`'s output was verified against the live service
+  on all 55 metacharacter-bearing subtokens in the sampled corpus, and all 14,922 distinct
+  subtokens escape to valid patterns (a 96,275-character alternation was accepted). The
+  narrowing that the warning itself sanctions is free here, because a wildcard pattern's
+  literal runs are **logically implied by** the regex and so cannot change the result set.
+
+  **Still open**: whether Q13 rides with it; the lexing rule for `_` (whitespace-
+  delimited only, or any separator); what a condition consisting only of wildcards
+  does (today a bare `_` is `condition_empty`; as a wildcard it would mean "match
+  everything", which D7 forbids, so it must still be rejected with different copy);
+  whether the 4 KiB filterable-value limit applies to a `glob` column (order 10²–10³
+  rows would exceed it); and that `coll(_)`, which §5.1 rules matches nothing on
+  purpose, would start matching `coll(<anything>)`.
+
 ## 13b. Reader testing of the interface copy — done
 
 Three rounds, drafts 1 through 3, moved to `SEMANTIC_SEARCH_SITE_PLAN_DONE.md` §13b, where
@@ -3903,7 +3988,16 @@ turbopuffer's own `Glob`/`Regex` and `["id","In",…]` cover both needs anyway.
 An earlier design normalised to a string with a private-use-area sentinel at
 every token boundary, to be matched with `Glob`. The adversarial review found
 it fatal: anchoring the query at both ends broke every partial-identifier
-query. It also cost 187 % of the original size in UTF-8, brushed the 4 KiB
+query.
+
+**Partly superseded 2026-08-26 by Q14**, which proposes a glob column for *wildcard
+conditions only* rather than as the mechanism for all conditions. The fatal objection
+does not transfer: Q14's pattern is unanchored (leading and trailing `*`) while the
+boundary sentinels live in the stored value, so partial-identifier queries work —
+measured. The size figure does not transfer either: measured at **+41 %** over the
+subtoken bytes, not 187 %, and 2.4 % of the namespace. The metacharacter objection
+**does** transfer and is answered by escaping, not dissolved; the 4 KiB objection
+stands unmeasured and is Q14's first probe. It also cost 187 % of the original size in UTF-8, brushed the 4 KiB
 filterable limit, and inherited `globset`'s metacharacter problems — `?` alone
 is 6.2 % of all characters in the corpus, and an unclosed `[` or `{` makes the
 whole query **error** rather than return nothing. Token arrays dissolve all of
@@ -3941,6 +4035,16 @@ anywhere, i.e. very nearly the whole corpus. Adjacency is what makes the filter
 syntactic. Keeping `ContainsTokenSequence` and narrowing the discard rule
 instead retains both properties at the cost of a rule that names its separators
 explicitly.
+
+**"Adjacency is what makes the filter syntactic" was overridden by the user on
+2026-08-26**, for wildcard conditions only (Q14). He was shown this paragraph and
+ruled anyway. What is given up is exactly what it says: `f _ x` skips an unbounded run
+and will match across `⟹`, `=` and brackets, so a wildcard condition is a weaker
+filter than an adjacent one — very nearly the corpus when both runs are common. What
+is kept is that this applies **only** where the reader typed a `_`; every condition
+without one still compiles to `ContainsTokenSequence` and still means adjacency. The
+paragraph above stands as the reason not to make this the default, which nobody
+proposes.
 
 Note a defect the narrowed rule also fixes. With operators discarded, `f x + y`
 has subtokens `['f','x','y']`, so an adjacency query for `x y` would match
