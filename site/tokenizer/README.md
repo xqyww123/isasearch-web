@@ -1,13 +1,15 @@
-# The JavaScript tokenizer, and how the two implementations are held together
+# The tokenizer, and how the two implementations are held together
 
 §5 of `SEMANTIC_SEARCH_SITE_PLAN.md` defines one tokenizer and the site runs it twice:
-the Python implementation (`Isabelle_Semantic_Embedding/isabelle_tokenizer.py`) builds
-the index, and the JavaScript one here compiles every query. **If the two disagree the
+the Python implementation (`isabelle_tokenizer.py`, here) builds the index, and the
+JavaScript one (`isabelle_tokenizer.js`, beside it) compiles every query. **If the two disagree the
 site returns silently wrong results** — no error, no log line; a query simply stops
 matching documents it should match.
 
 ```
+isabelle_tokenizer.py   the tokenizer (§5), Python side. Builds the index
 isabelle_tokenizer.js   the port. Reads the asset, asks JavaScript nothing
+tokenizer_asset.py      builds the one asset both read (D45)
 asset.json              the character classes and the two symbol tables (D45)
 inputs.jsonl            15,253 inputs. No expected outputs — see below
 expected.json           one digest, 334 bytes. This is the gate
@@ -98,9 +100,9 @@ An empty diff means both implementations moved together, so a rule changed and
 
 ## Changing a rule
 
-Bump `TOKENIZER_RULE` in `Isabelle_Semantic_Embedding/tokenizer_asset.py`, change both
+Bump `TOKENIZER_RULE` in `tokenizer_asset.py` (here), change both
 implementations, add the hand-written cases the new rule needs to
-`test_isabelle_tokenizer.py` and to `build_inputs.py`'s `SYNTHETIC` — **hand-written,
+`../../tests/test_isabelle_tokenizer.py` and to `build_inputs.py`'s `SYNTHETIC` — **hand-written,
 because a case generated from the implementation cannot validate the implementation** —
 then `python3 build_inputs.py` and `python3 emit.py --update`. The diff will show a new
 asset, new inputs and one new digest, which is what a rule change should look like.

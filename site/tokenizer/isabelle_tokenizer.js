@@ -1,7 +1,7 @@
 /**
  * The JavaScript half of §5's tokenizer — the one the Worker runs against a query,
- * where the Python half (`Isabelle_Semantic_Embedding/isabelle_tokenizer.py`) built
- * the index. They must agree byte for byte or the site returns silently wrong
+ * where the Python half (`isabelle_tokenizer.py`, beside this file) built the
+ * index. They must agree byte for byte or the site returns silently wrong
  * results with no error anywhere, so this file is written to be read beside that one:
  * same order, same names, same algorithm, not a second reading of the same prose.
  *

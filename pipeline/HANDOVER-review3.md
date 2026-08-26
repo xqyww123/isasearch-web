@@ -781,7 +781,9 @@ outstanding.
 ### NEXT ACTS
 
 1. **Purge the Cloudflare edge cache** if it has not been done since the deploy
-   — the entity pages and the two HTML pages are cached four hours, so visitors
+   — entity pages are edge-cached four hours (`/` and `/about` are NOT edge-cached
+   at all — browser only, one hour; corrected 2026-08-26 against worker/src/index.js),
+   and `/source/*` thirty days by the zone rule, so visitors
    may still be served the old copy. Dashboard → qiyuan.me → Caching →
    Configuration → Purge Everything (the zone is Free; purge-by-prefix is
    Enterprise-only).
@@ -885,18 +887,22 @@ Skeleton sketched (unreviewed): 0 preflight → 1 scan → 2 map → 3 publish �
 wrangler.toml + `wrangler deploy`) → 9 live acceptance → 10 purge the zone cache
 → 11 delete the old namespace, update `pipeline/`.
 
-### Two decisions the user has NOT made
+### Decisions — one still open (2026-08-26)
 
-1. **Does Q13 ride with this re-export?** (`_` and `.` kept as matchable tokens
-   — plan §16.8's Q13, user 2026-08-25 "有必要重新导入", deferred until the front
-   end shipped, which it has.) Marginal cost zero if combined; a separate
-   re-export otherwise. It needs both tokenizer implementations changed, the
+1. **OPEN — does Q13 ride with this re-export?** (`_` and `.` kept as matchable
+   tokens — plan §16.8's Q13, user 2026-08-25 "有必要重新导入", deferred until the
+   front end shipped, which it has.) Marginal cost zero if combined; a separate
+   3 h 36 m export otherwise. It needs both tokenizer implementations changed, the
    `tokenizer_rule` bumped, asset + `expected.json` regenerated, and COPY
-   §0/§3.5/§5.1 rewritten and reader-tested.
-2. **Is `publish` + `gate` + the R2 upload part of this release?** The user said
-   "要重新 publish" when asking for the checklist, so presumably yes — confirm.
-   Without it the ~12,751 records new since the last publish have links that land
-   at the top of a page instead of on their line.
+   §0/§3.5/§5.1 rewritten and reader-tested. **It was additionally blocked by the
+   §16.6 gate being half-dark; that is repaired (see below), so the path is open.**
+2. **RULED yes** — `publish` + `gate` + the R2 upload are part of this release.
+   Without them the ~12,751 records new since the last publish would have links
+   landing at the top of a page instead of on their line.
+3. **RULED** — step 5 uploads with `rclone copy` and the deleting `sync` waits until
+   step 11, after acceptance. R2 has no staging, so step 5 writes into the prefix the
+   live site is already serving; deleting there while the old index is still live
+   would 404 real visitors. End state identical.
 
 ### Still deferred, unchanged
 

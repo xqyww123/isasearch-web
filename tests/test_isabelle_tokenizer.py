@@ -22,8 +22,7 @@ import os
 
 import pytest
 
-# By path, not by package, for the reason `check_test_vectors.load_tokenizer_module`
-# gives: the tokenizer needs nothing but the standard library and the asset, and the
+# By path, not by package, for the reason `emit.load_tokenizer_module` gives: the tokenizer needs nothing but the standard library and the asset, and the
 # gate has to run where the rest of the package cannot be installed.
 def _vector_dir():
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),

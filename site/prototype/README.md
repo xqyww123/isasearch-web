@@ -63,7 +63,7 @@ freezing it on 2026-08-19.
 
 ## What replaces them
 
-`Isabelle_Semantic_Embedding/isabelle_tokenizer.py` — step 1 of the plan's **§16.3**
+`site/tokenizer/isabelle_tokenizer.py` — step 1 of the plan's **§16.3**
 build order (§15.3, which an earlier version of this file cited, has moved into
 `SEMANTIC_SEARCH_SITE_PLAN_DONE.md` and is superseded). **Written 2026-08-19**, with
 `tokenizer_asset.py` beside it to build what it reads and

@@ -717,8 +717,8 @@ rclone copy published.$TODAY R2:isasearch/source --transfers 32 --checkers 32 --
 rclone check published.$TODAY R2:isasearch/source --one-way
 ```
 
-**`copy`, not `sync`, and that is deliberate.** `sync` would delete every object
-under `source/` that is absent from the local tree. Those deletions are wanted
+**`copy`, not `sync`, and that is deliberate** (ruled 2026-08-26). `sync` would delete
+every object under `source/` that is absent from the local tree. Those deletions are wanted
 eventually — a theory dropped from the AFP must stop being served — but running them
 *now* would 404 real visitors following links from the still-live old index. So this
 step only adds and overwrites, and the pruning pass waits until step 11, after

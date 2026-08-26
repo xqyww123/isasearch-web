@@ -29,16 +29,18 @@ on:
   push:
     paths:
       - site/tokenizer/**
-      - site/prototype/**
       - tests/test_isabelle_tokenizer.py
+      # not a gate input, but it holds the loader that reaches the two modules:
+      - src/site_export.py
       - .github/workflows/tokenizer-gate.yml
   pull_request:
     # Spelled out rather than shared through a YAML anchor: GitHub's workflow
     # parser has never supported anchors reliably.
     paths:
       - site/tokenizer/**
-      - site/prototype/**
       - tests/test_isabelle_tokenizer.py
+      # not a gate input, but it holds the loader that reaches the two modules:
+      - src/site_export.py
       - .github/workflows/tokenizer-gate.yml
   workflow_dispatch:
 

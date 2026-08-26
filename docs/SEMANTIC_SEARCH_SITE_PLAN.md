@@ -3566,14 +3566,27 @@ site test files under `tests/`, this plan and its companions under `docs/`,
 file, the scan and map artefacts, the live-patch checkpoint). The generated
 published tree is `published/` here, git-ignored. The DB library (`Isabelle_Semantic_Embedding`,
 `contrib/Semantic_Embedding`) stays a dependency — the export imports it to
-read the store, and the Python tokenizer remains there. Two consequences
-recorded honestly: D16's one-repository argument below now spans two
-repositories (the Python tokenizer beside the DB, the JavaScript port and
-the shared asset here), so the §16.6 gate's asset-equivalence checks are the
-anti-drift enforcement and its CI must see both repositories — an
-operational point to settle when CI is wired, not decided here; and the
-"ship the export in the conda package" clause at this section's end is
-retired with the subcommand. The paragraphs below predate the migration and
+read the store. The "ship the export in the conda package" clause at this
+section's end is retired with the subcommand.
+
+**The Python tokenizer stayed behind in that package until 2026-08-26, and
+that was a mistake this section recorded as a consequence.** It said D16's
+one-repository argument now spanned two, that the §16.6 gate's CI "must see
+both repositories — an operational point to settle when CI is wired". What
+actually happened is that the gate's two halves each computed a path to the
+other across the new boundary, both from their own `__file__`, and neither
+could find it: **the Python half of the gate did not run at all between
+2026-08-24 and 2026-08-26**, silently, because a gate that cannot start looks
+exactly like a gate with nothing to report. It was found while writing
+`docs/RELEASE.md`, not by anything that was watching.
+
+`isabelle_tokenizer.py` and `tokenizer_asset.py` therefore live in
+`site/tokenizer/` now, beside the port, the asset and the frozen inputs, with
+the gate's workflow in this repository's `.github/`. Nothing in the DB package
+imported them; the site is the tokenizer's only consumer. **D16 holds
+unamended: one repository, one CI run** — which is the sentence the next
+paragraph has always contained, and which the 2026-08-24 amendment should have
+been read as violating rather than as qualifying. The paragraphs below predate the migration and
 keep their original wording as the record of D16 as first ruled.
 
 The site lives in this repository because the tokenizer has two
@@ -3584,13 +3597,12 @@ not.
 Built (the first three, 2026-08-19 and 2026-08-20) and still planned (the last two):
 
 ```
-Isabelle_Semantic_Embedding/
-  isabelle_tokenizer.py   the tokenizer (§5), Python side          BUILT
-  tokenizer_asset.py      builds the one asset both read (D45)     BUILT
-  site_export.py          the site export (§8), reached as
-                          `isabelle-semantics site-export`         BUILT
+src/
+  site_export.py          the site export (§8)                     BUILT
 site/
-  tokenizer/              the JavaScript port + the shared inputs   BUILT
+  tokenizer/              BOTH implementations, the asset they read,
+                          the frozen inputs and digest, and the two
+                          drivers that check them (§5.5)            BUILT
   worker/                 Cloudflare Worker: search API, embedding cache, rate
                           limits, entity page rendering
   pages/                  static assets: subsetted IsabelleDejaVu, styles, scripts
