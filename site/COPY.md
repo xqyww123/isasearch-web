@@ -79,7 +79,8 @@ prefix matching that does not exist. Nothing in the interface may imply it.
 | **search** — the action, and the unit the daily limit counts | query, request, lookup | one action, one word |
 | **part** — one unit of matching, per §0 | piece, fragment, token, subtoken | draft 2 used "part" and "piece" for one thing |
 | **entity expression**, short form **expression** near the Expression panel | statement, term, formula | §1 of the plan |
-| **the associated theories** | related theories, relevant theories | §1 of the plan, verbatim |
+| **the theories of the constants used** — a theorem's constituent theories, on its entity page only (§8) | the associated theories, related theories, relevant theories | "the associated theories" named a field that meant two things by kind; D55 split it 2026-08-26 and the term retired with it |
+| **defined in «theory»** — where an entity is written, the one thing a Theory Name condition matches (§8.1) | declared in, proved in, lives in | one word for one concept, and it is the user's own from §3.5's foot line |
 | **derived rule** — an Introduction rule, an Elimination rule, an Induction rule or a Case split; **defined at first use, every time** | theorem-alike, theorem-like | draft 2 used two undefined collective terms |
 | **select** / **selected** for the Kind buttons | tick, chip | "tick" is British and low-frequency |
 
