@@ -1090,3 +1090,22 @@ short version:
   namespace `isasearch-regexprobe-64d-1200k` (kept as reproduction substrate).
 - Cold-first-vector-query: two more observations (9.13 s ANN after idle; one
   kNN >300 s client timeout after ~4 min idle, 542 ms on retry).
+
+## ADDENDUM (2026-08-26, evening): conditions are raw-text regular expressions
+
+Three user rulings in quick succession replaced the two-form condition design:
+regex is the DEFAULT and ONLY condition form; no token sequences, no tokenizer,
+no `\n`-joined columns — patterns match the raw `name`/`expr`/`theory` text as
+displayed (those columns exist untruncated; they gain `regex: true` at the next
+re-export, and the `*_subtokens` columns drop). Q13 is moot; the site tokenizer
+subsystem and the §16.6 gate retire with the re-export. The dialect probe ran
+all-green (Not(Regex) exact/composable; \b and \<...\> whole-word; `.` stops at
+real newlines, (?s)/[\s\S]/\s cross; empty pattern matches everything — hence
+pre-request rejection; (?i), \x{27F9}, \p{L}, POSIX classes fine; script at
+~/isasearch-pipeline/regexprobe/rawprobe/probe.py). Deadline table final:
+4s/8s/12s/15s per class, retry only where timeout is anomalous, one retry per
+search, no total budget (~25 s structural bound accepted), fallback error page
+approved. Docs rewritten (plan Q14 "THE FINAL RULING", Q13 banner, §6.3, §6.3c
+v2, §5/§16.6 scope notes; COPY §0/§1/§3.2/§3.5/§5.1/§5.3/§5.6). NEXT: the user
+wants ONE MORE REVIEW ROUND over the rewritten design before implementation;
+then the M3 raw-text sweep (launch gate), then the router build.

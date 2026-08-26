@@ -27,44 +27,20 @@ a substitution slot, never shipped as written.
 
 ## 0. The matching rule, stated once
 
-Draft 2 stated this rule four times in three incompatible ways, and both
-reviewers independently made it their top finding. It is stated **here**, and
-every place in the interface that needs it uses this wording without variation.
+A condition is a **regular expression** (Rust `regex` dialect), matched against
+the entity's text exactly as the site displays it: the full name (Entity Name),
+the statement or defining source (Expression), the defining theory's name
+(Theory Name). A match anywhere in the text counts — a pattern is a substring
+search, and anchors are available. Matching is case-sensitive unless the
+pattern says otherwise (`(?i)`). Isabelle's `\<symbol>` forms are translated to
+their symbols before matching; abbreviations such as `==>` are not.
 
-Isasearch divides a name into **parts**. The dividers are `_`, `.`, the question
-mark, and the subscript and superscript marks; a divider is thrown away and can
-never be matched itself. Every **other** character that is not a letter or a digit —
-a hyphen, a bracket, an operator — is a part on its own and can be matched. A
-condition matches when its parts appear **as whole parts, in the order given, with
-nothing between them**.
-
-Two consequences of the first two sentences that every screen must respect, because
-draft 3 broke both. A condition that consists only of dividers has no parts left and
-is rejected. A condition that mixes dividers with other characters is **not**
-rejected: it is reduced to the parts that survive, and the search then runs on the
-reduction, so `_ + _` searches for `+`. §4.6 is the notice that says so.
-
-Measured consequences, all verified against the corpus on 2026-08-14, and the
-worked examples in the interface are drawn from this list:
-
-| Condition | `Path_Connected.path_image_join` | why |
-|---|---|---|
-| `path` | matches | a whole part |
-| `image_join` | matches | two whole parts, adjacent, in order |
-| `Path_Connected` | matches | likewise |
-| `Connected.path` | matches | the `.` divides, the two parts are adjacent |
-| `join_path` | no | right parts, wrong order |
-| `Path` vs `path` | different | upper and lower case are distinct |
-
-| Condition | `sorted_wrt` | why |
-|---|---|---|
-| `sorted` | matches | a whole part |
-| `sort` | **no** | only whole parts match, never a fragment of one |
-| `orted` | no | likewise |
-
-**`sort` not matching `sorted_wrt` is the fact that draft 2 got wrong.** It said a
-condition may be "any part of the name that starts at a boundary", which promises
-prefix matching that does not exist. Nothing in the interface may imply it.
+*(Rewritten 2026-08-26. Until then this section stated the token-matching rule
+— dividers, parts, whole-part matching, the `sorted`-matches-`sorted_wrt`
+table — which died when the user ruled conditions are regular expressions over
+raw text and tokenization was removed from search ("既然有了正则，我们就不需要
+再做 token 序列化了"). The old rule survives in git history and in plan §5,
+which is itself marked historical.)*
 
 ## 1. The words this interface uses, and the ones it does not
 
@@ -77,13 +53,15 @@ prefix matching that does not exist. Nothing in the interface may imply it.
 | **search box** — the large input; **condition box** — the input inside a condition | the box, unqualified | draft 1 used "the box" for three inputs |
 | **query** — the text in the search box | description, search string, prompt | D40's locked hover says "your query" |
 | **search** — the action, and the unit the daily limit counts | query, request, lookup | one action, one word |
-| **part** — one unit of matching, per §0 | piece, fragment, token, subtoken | draft 2 used "part" and "piece" for one thing |
 | **entity expression**, short form **expression** near the Expression panel | statement, term, formula | §1 of the plan |
 | **the theories of the constants used** — a theorem's constituent theories, on its entity page only (§8) | the associated theories, related theories, relevant theories | "the associated theories" named a field that meant two things by kind; D55 split it 2026-08-26 and the term retired with it |
 | **defined in «theory»** — where an entity is written, the one thing a Theory Name condition matches (§8.1) | declared in, proved in, lives in | one word for one concept, and it is the user's own from §3.5's foot line |
 | **derived rule** — an Introduction rule, an Elimination rule, an Induction rule or a Case split; **defined at first use, every time** | theorem-alike, theorem-like | draft 2 used two undefined collective terms |
 | **select** / **selected** for the Kind buttons | tick, chip | "tick" is British and low-frequency |
-| **regex switch** — the per-condition control that makes the condition a regular expression (§3.2; ships with the re-export, plan §13 Q14) | mode, toggle button | one control, one name; "toggle" is taken by contains/excludes |
+
+*(Deleted 2026-08-26: the **part** row — the concept died with tokenization,
+§0 — and the **regex switch** row — there is no switch, every condition is a
+regular expression.)*
 
 Absent by decision: **literally**; **run** as a noun; **allowance**; **resets**;
 **authoritative** outside D30's locked first sentence; **carry** in the sense of
@@ -214,21 +192,21 @@ condition reads:
 
 > add condition
 
-**The regex switch** (ships with the Q13/Q14 re-export; absent until then). Each
-condition carries a switch labelled:
+**The condition box** (2026-08-26: every condition is a regular expression;
+there is no mode and no switch — the earlier regex-switch design of the same
+day is superseded). The box's placeholder, user-ruled:
 
-> regex
+> a regular expression
 
-Off by default. Off, the condition matches parts as §0 says. On, the condition
-text is a regular expression; the switch's hover:
+Its hover (updated from the approved switch-hover after the raw-text ruling —
+the "parts joined by newlines" clause became false):
 
-> The condition is a regular expression, matched against the entity's parts
-> joined by newlines. See the about page.
+> The condition is a regular expression, matched against the text as shown.
+> Isabelle's `\<symbol>` forms are understood; abbreviations such as `==>` are
+> not — paste the symbol itself instead.
 
-There is no fuller teaching anywhere (user-ruled 2026-08-26): the hover's one
-line carries the only fact a regex-literate reader cannot infer — what the
-pattern is matched against — and §5.8's verbatim engine message announces the
-dialect's limits when they bite.
+Abbreviation expansion is retired from condition boxes (user-ruled: "完全放弃
+缩写"); it never applied to the search box.
 
 ### 3.3 — deleted 2026-08-25 with the All panel
 
@@ -272,9 +250,11 @@ the right (its placement is the user's, 2026-08-25 — under the Kind panel it
 read as part of that panel, and set alone on a full-width row above a rule it
 outweighed everything else on the screen).
 
-The line, **the user's own words, 2026-08-25**:
+The line, **the user's own words, 2026-08-25** (its first sentence,
+"Conditions are **case-sensitive**.", deleted at his ruling 2026-08-26 — a
+regular expression decides its own case-sensitivity):
 
-> Conditions are **case-sensitive**. Entity Name: the full names of the
+> Entity Name: the full names of the
 > constants, types, type classes, theorems and so on. Expression: the
 > proposition of the theorem, the type of the constant, and the source code
 > defining the type, type class, locale, the proof method, or the named theorem.
@@ -551,96 +531,30 @@ implementation on 2026-08-26 ("COPY.md 你可以自主编辑").)*
 Draft 4 added here a notice above the result list — "«Expression `_ + _`» was
 read as «`+`»" — whenever a condition lost a separator. It was the author's
 response to a reader finding, never put to the user, and the user struck it on
-sight ("我并不记得我批准过这个设计，而且我觉得不应该提醒"). The reduction
+sight ("我并不记得我批准过这个设计，而且我觉得不应该提醒"). ~~The reduction
 itself stands (§0: a condition that mixes separators with other characters is
-reduced, not rejected); the interface does not announce it. §5.1's reference
+reduced, not rejected); the interface does not announce it.~~ (The reduction
+died with §0's 2026-08-26 rewrite — a regular expression is never reduced.) §5.1's reference
 block lost its sentence about the notice with it.
 
 ## 5. Empty states
 
 ### 5.1 An Expression condition matched nothing
 
-Generic: shown for whatever the visitor typed, so nothing on it assumes what they
-meant. The worked case is separated from their own input by its own heading,
-which draft 2 failed to do — it labelled the visitor's own quoted condition "For
-example".
+> **Nothing satisfies this condition**
+>
+> «Expression contains `pattern`»
+>
+> The pattern is matched against the entity's text exactly as the site displays
+> it. Characters that are regular-expression syntax — `+ * ( ) [ ] { } | . ? ^
+> $ \` — must be backslash-escaped to be matched as text.
 
-> **Nothing contains that text**
->
-> An Expression condition matches text, not patterns. It has no variables: `?n`
-> searches for the name `n`.
->
-> **Your condition**
-> «?n + ?m = ?m + ?n»
-> Isasearch removes the question marks — from your condition and from the text it
-> searches — and then looks for «7» parts, one directly after another, in this
-> order: «`n` `+` `m` `=` `m` `+` `n`».
->
-> **Why this usually happens**
-> A condition fixes the variable names, but a statement is displayed with the
-> variable names that its own author chose. `?n + ?m = ?m + ?n` finds nothing, even
-> though the theorem that it describes is in the index:
-> `Groups.ab_semigroup_add_class.add.commute` is printed as `?a + ?b = ?b + ?a`.
-> The variable names are the only difference.
->
-> **What to do instead**
-> Describe the statement in the search box — *addition is commutative* — and use
-> an Expression condition only for a name that must appear, such as `sorted_wrt`
-> or `continuous_on`.
->
-> *[button]* Remove this condition and search again
-
-For an `excludes` condition, the whole page is replaced:
-
-> **Everything that remains contains that text**
->
-> **Your condition**
-> excludes «⟹»
-> Every entity that satisfies your other conditions contains it, so none is left.
->
-> **Why this usually happens**
-> Operators are common. `⟹` alone appears in «45 %» of all statements, and your
-> other conditions have already narrowed the results to a set in which every
-> remaining entity uses it.
->
-> **What to do instead**
-> Exclude a name rather than an operator. Excluding an operator removes a large
-> part of the index at once, and it cannot be undone by the search box: the query
-> orders results, it cannot remove them.
->
-> *[button]* Remove this condition and search again
-
-The reference block beneath, on both variants:
-
-> **What an Expression condition matches**
->
-> ✓ Names and operators, as the card displays them: `continuous_on`, `sorted_wrt`,
->   `⟦`
-> ✓ Whole parts of a name, in the order you typed them: `sorted` matches
->   `sorted_wrt`; `sort` matches nothing, because only whole parts are matched,
->   never a fragment of one
-> ✓ Isabelle's ASCII form, for every symbol that Isabelle displays as a character:
->   `\<Longrightarrow>` is understood as `⟹`. Abbreviations such as `==>` are
->   converted inside the condition box while you type; an abbreviation that has more
->   than one meaning is not converted, so type the `\<…>` form for those. A few
->   markup escapes, such as `\<^named_theorems>`, have no character of their own and
->   are matched exactly as you typed them.
->
-> ✗ Patterns of any kind. **These are not rejected — they are reduced**, which is
->   worse, because the search then succeeds and returns the wrong entities:
->   - `_` and `.` are separators, so `_ + _` becomes the single part `+` and
->     matches every statement that contains a plus sign;
->   - `.*` becomes `*` and matches a literal multiplication sign;
->   - `cont*` loses nothing, but it is read as the two parts `cont` `*`, which
->     almost nothing contains: a star is an ordinary character here, not a wildcard.
-> ✗ Question marks, `_`, `.` and the subscript and superscript marks are separators
->   and are never matched themselves. A subscripted name such as `f⇩1` is therefore
->   found by `f`, and **not** by `f1`.
->
-> To search by the structure of a term, use Isabelle: `find_theorems` and
-> `find_consts` search structurally inside a session. The search box here ranks by
-> meaning, not by shape, so describing the term will find related statements but
-> cannot match a pattern.
+*(Rewritten 2026-08-26 for the regex ruling. The old section taught the
+token-matching rules at their bite point — operators as parts, the 45 % `⟹`
+figure, the advice to exclude names rather than operators — all of which died
+with tokenization. The escaping reminder is the new bite point: Isabelle text
+is full of regex metacharacters, and an unescaped `+` silently empties the
+result.)*
 
 ### 5.2 The conditions matched nothing between them
 
@@ -665,20 +579,18 @@ Appended whenever fewer than 11 kinds are selected:
 
 ### 5.3 One condition matched nothing
 
-Shown when exactly one condition is active and it is not an Expression condition
-(an Expression condition gets §5.1, which can explain the pattern mistake).
+Shown when exactly one condition is active (an Expression condition gets §5.1,
+whose escaping reminder is the likelier cure).
 
 > **Nothing satisfies this condition**
 >
 > «Entity Name contains `Path_Connectd`»
 >
-> A condition matches whole parts of a name, in the order you typed them, and
-> upper and lower case are different. Check the spelling and the capitals. If you
-> are unsure of the whole name, type **fewer parts** of it — `Path` rather than
-> `Path_Connectd`. Typing a shorter piece of one part does not help, because only
-> whole parts are matched.
->
-> *[button]* Remove this condition and search again
+> The pattern is matched against the text as displayed. Check the spelling,
+> escape regular-expression syntax meant as text, or remove the condition.
+
+*(Rewritten 2026-08-26; the whole-parts teaching it carried died with
+tokenization.)*
 
 ### 5.4 The kind selection alone is the cause
 
@@ -698,10 +610,11 @@ genuine backend failure is §6's territory, which already covers it.
 
 ### 5.6 A condition with nothing to match
 
-> Nothing in this condition can be matched. `_`, `.`, the question mark and the
-> subscript and superscript marks divide a name into parts and are not matched
-> themselves, so a condition made only of them has no text remaining. Add a name or an
-> operator, or remove the condition.
+> This condition is empty. Write a regular expression, or remove the condition.
+
+*(Rewritten 2026-08-26. The old text explained the divider class — gone with
+tokenization. The rejection itself is load-bearing and pre-request: an empty
+pattern was measured to match every row, which D7 forbids.)*
 
 ### 5.7 The search box is empty
 
