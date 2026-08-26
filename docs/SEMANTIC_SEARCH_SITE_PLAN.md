@@ -4032,15 +4032,62 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   selective conjunct to add. What to do about it (report to turbopuffer with the
   reproduction, mitigate, or accept and document) is the user's call, not settled here.
 
-  **Status.** The mechanism question that blocked Q14 is answered; what remains open is
-  the design ruling in light of it — the wildcard feature would inherit exactly the
-  production defect's failure class for all-common-token conditions, no worse and no
-  better. Asking turbopuffer remains worthwhile and now comes with a precise
-  reproduction. Probe scripts and raw logs: `~/isasearch-pipeline/regexprobe/`
-  (`topk_probe.py` is the discriminating experiment; `topk-run1.txt` the steady-state
-  table). The probe namespace `isasearch-regexprobe-64d-1200k` was deliberately left
-  alive as the reproduction substrate for a turbopuffer conversation — delete it once
-  that is settled (a rebuild costs ~12 minutes via `build.py`).
+  **The solution (2026-08-26, same session, measured end to end): turbopuffer's
+  documented exact mode, `rank_by: ["vector", "kNN", …]`.** Announced in their
+  changelog December 2024 as "kNN exact search for 100% recall on filtered vector
+  search queries"; the docs state it "performs an exhaustive search, computing the
+  exact distance from the query vector to every document matching the filters", and
+  that it *requires* filters (which every conditioned query has). It replaces the
+  neighborhood path entirely — no conjunction repair, no chunking, no reliance on
+  undocumented behavior. Verified:
+
+  - **Probe namespace (1.2M rows), bare `Regex`/`Glob`/`ContainsTokenSequence` under
+    kNN**: complete on every condition including every previously failing one, and the
+    returned ranking matched a locally computed exact cosine ranking **position by
+    position**, the only deviations being swaps and one boundary substitution among
+    rows whose distances differ by ≤ 8.6×10⁻⁵ — f16 rounding ties, deterministic
+    across calls.
+  - **Production (1,337,009 rows, real 4096-dim vectors, read-only), bare
+    `ContainsTokenSequence` under kNN**: every adversarial condition complete where
+    ANN had collapsed — `f x = x` 142/142 (ANN: 2), `a = b` full 200 (ANN: 47–106),
+    `x = y` full (ANN: 190–200), and even a bare `=` with 655,804 matches complete.
+    The `f x = x` ranking was verified against local exact ground truth: **zero
+    order differences**. This also empirically answers the one caveat the docs left
+    open — kNN is exact even when the filter is a partial-postfilter operator.
+  - **Cross-field `Or` (the `All` panel shape) under kNN**: complete on every
+    condition tried.
+
+  **The price is latency, and it is the latency of exactness**: filter evaluation
+  plus exhaustive scoring of the matches. Measured on production: 86 ms
+  (`finite set`) – 174 ms (`x - y`) – 223 ms (`x + y`) – 554 ms (`f x = x`, whose
+  filter scan is the expensive part) – 1.2 s (`x = y`, 14,880 matches) – 5–8 s for
+  the degenerate bare `=` (655,804 matches, half the corpus). Billing is negligible:
+  queries bill by data scanned with a 1.28 GB per-query minimum at $1/PB ≈
+  $0.0000013 per query. Design decisions this leaves to the user: whether every
+  conditioned query simply uses kNN (recommended — unconditioned queries keep ANN,
+  which kNN cannot serve anyway since it requires filters), and whether
+  near-degenerate conditions get a match-count bound for the latency tail.
+  With kNN, the conjunction repair is no longer needed for correctness; conjoining
+  the literal runs remains available as a filter-scan optimization only.
+
+  **Fallback, archived**: if kNN were ever lost, a chunked scheme over
+  `["id","In",…]` lists of ≤ ~250 ids (exhaustive-and-exact below a measured
+  ~300-entry boundary; complete, zero-retry, order-exact pipelines measured at 0.2–
+  10.6 s) works, with per-chunk completeness verifiable client-side because the
+  expected row count is known; and a bigram (adjacent-subtoken-pair) column would
+  shrink the lossy-path surface by ~3 orders of magnitude (155 of 833,380 pairs
+  above 1 % of rows vs 174 of 54,406 singletons) without eliminating it. Both are
+  documented in the agents' reports under `~/isasearch-pipeline/regexprobe/`.
+
+  **Also observed while measuring**: the cold-first-vector-query phenomenon
+  reproduced twice more on production — 9.13 s on an ANN query after an idle gap
+  (fourth observation) and one kNN query that exceeded a 300 s client timeout after
+  a ~4-minute idle gap yet ran at 542 ms on retry. Worth including in any
+  turbopuffer conversation (a draft engineering report sits at
+  `~/isasearch-pipeline/regexprobe/agentC/turbopuffer-report-draft.md`, not sent).
+  The probe namespace `isasearch-regexprobe-64d-1200k` is deliberately left alive
+  as the reproduction substrate — delete it once the turbopuffer conversation is
+  settled (a rebuild costs ~12 minutes via `build.py`).
 
   **The 4 KiB filterable-value limit does not apply** (measured 2026-08-26, closing this
   question): a `{"type":"string","glob":true,"regex":true}` column accepted a

@@ -1063,3 +1063,30 @@ substrate for a turbopuffer conversation; delete it once that is settled.
 
 **The 9.5 s cold first query reproduced a third time** (9.18 s, first CTS query
 on production after a burst of aggregate/filter-only queries).
+
+## ADDENDUM (2026-08-26, later the same session): the reliable fix exists — kNN
+
+The section above ended with "no known in-engine mitigation". That is now false,
+in the best way: turbopuffer has a **documented exact mode**,
+`rank_by: ["vector", "kNN", …]` (changelog Dec 2024: "kNN exact search for 100%
+recall on filtered vector search queries"; requires filters, exhaustive over the
+matching documents). Everything is in plan §13 Q14 under "The solution"; the
+short version:
+
+- Verified exact against locally computed ground truth on the probe namespace
+  (bare Regex/Glob/CTS, deviations only f16 ties ≤ 8.6e-5) AND on production
+  (`f x = x` 142/142 with zero order differences where ANN returned 2; bare `=`
+  with 655,804 matches complete). Cross-field `Or` complete.
+- Latency on production: 86 ms–1.2 s for real conditions; 5–8 s for the
+  degenerate bare `=`. Billing negligible.
+- The conjunction repair is obsolete for correctness; the chunked
+  `["id","In",…]` scheme (exhaustive below a measured ~300-entry boundary) and
+  the bigram-column statistics are archived as fallbacks in the agents' reports
+  under `~/isasearch-pipeline/regexprobe/` (agentA/, agentC/, agentD/).
+- Decisions left to the user: route every conditioned query through kNN
+  (recommended; unconditioned stay ANN), a match-count bound for the latency
+  tail, whether/where to send the turbopuffer draft
+  (`agentC/turbopuffer-report-draft.md`), and when to delete the probe
+  namespace `isasearch-regexprobe-64d-1200k` (kept as reproduction substrate).
+- Cold-first-vector-query: two more observations (9.13 s ANN after idle; one
+  kNN >300 s client timeout after ~4 min idle, 542 ms on retry).
