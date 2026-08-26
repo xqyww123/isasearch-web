@@ -795,3 +795,123 @@ outstanding.
 5. Undecided and harmless: the thin-space digit grouping (`1 230 467`) against
    the user's comma form (`1,230,467`) — COPY §1's rule stands unless he says
    otherwise.
+
+---
+
+## STATE AT COMPACT #6 (2026-08-26) — D55 LANDED, NOT DEPLOYED, RELEASE.md NEXT
+
+### What the live site serves right now
+
+Version `6e38ad41`, deployed 2026-08-25. It is **five commits behind** the
+repository and knows nothing of D55. Namespace `isasearch-2025-2-afp-2026-05-13`.
+
+### The five unpushed commits (origin only — one remote, `origin`)
+
+```
+f7ff912  COPY's glossary retires "the associated theories"
+fb32295  The Defined in line moves under the statement box, where it can be seen
+da0b63a  The plan records D55, and §6.1 matches the code again
+3cce114  Theorems get a defining theory, and the theory field stops meaning two things
+bceafca  An Isabelle/ML position prints its own path, not a theory that is not there
+```
+
+Working tree clean. 131 Python tests and 31 Node tests pass.
+
+### D55 in one paragraph
+
+A Theory Name condition used to mean two things: a name-addressed entity's
+declaring theory, a theorem's ~7 constituent theories. It now means one — the
+theory the entity is **written in** — derived in the export from the source
+position through §17's map, and stored. `theories` ([]string) became `theory`
+(string); `constituent_theories` ([]string, display-only, unindexed, sorted) is
+new; `group` and `interpretation`'s full-text index are deleted, as are
+`THEORY_SEPARATOR`, its probe, and D26's card marking. Coverage 99.95 % of
+theorem-alike, 100 % of name-addressed, 533 records resolve to `''` and match
+no Theory Name condition. `HOL.` selects 4.0 % where it selected 98.6 %.
+
+### NOT DEPLOYABLE ALONE
+
+The Worker asks for `theory` and `constituent_theories` in `include_attributes`;
+the live namespace has neither, and turbopuffer answers **HTTP 400** on the whole
+query, not a null. Measured 2026-08-26. So the code ships only with a re-export
+into a new generation.
+
+### Live measurements taken today, for the release checklist
+
+| step | command | measured |
+|---|---|---|
+| scan | `python3 src/site_source_pages.py scan --out <path>` | **30 s**; 1,341,843 records, 9,818 linkable position files, 486,655 (file, line) pairs |
+| map | `python3 src/site_source_pages.py map --scan <s> --rendered ~/.isabelle/Isabelle2025-2/browser_info --theories ~/Current/MLML/data/theories.json --out <path>` | **7.6 s**; 10,595 theory pages, 1,165 aux copies of 1,139 symbolic paths, residue 0, **linked 1,329,092 of 1,341,843 (99.05 %)** |
+| export | `python3 src/site_export.py --source-links <artefact> [--namespace N] [--limit N]` | ~103 docs/s ⇒ ~3 h 36 m for the full corpus |
+
+`publish` takes `--rendered --artefact --out` (out must not exist); `gate` takes
+`--published --artefact [--namespace --sample --update-counters --rendered]`;
+`patch` takes `--artefact --namespace --checkpoint [--limit]`.
+
+**The committed `pipeline/map-artefact.json` is stale**: the store has moved
+**4,834 records** past it, and `iter_documents`' A3/B5 guard refuses such a run.
+A release therefore *starts* with scan + map — 40 seconds, so no reason not to.
+Today's fresh pair is in the job tmp dir (`scan-new.json` `f024ff84cb98`,
+`map-new.json` `ec9da0bd000f`); they were NOT committed, because committing a
+map implies republishing the tree it describes.
+
+### Temporary things that MUST be cleaned up
+
+1. **turbopuffer**: `isasearch-preview-20260826` (27,904 real records in the new
+   schema) and `isasearch-preview-20260826.asset`. Built with the DEV key for a
+   local preview. The live namespace was only ever read.
+2. **`worker/.dev.vars` carries `TPUF_NAMESPACE=isasearch-preview-20260826`** —
+   a line that did not exist before. Remove it, or local dev silently talks to a
+   2 %-slice namespace. (The file is git-ignored; the live target lives in
+   `worker/wrangler.toml`.)
+3. A `wrangler dev --local --port 8787` is running, serving that preview
+   namespace. It is ours, started 2026-08-26.
+
+### NEXT TASK, as the user set it
+
+**Write `docs/RELEASE.md`** — there is no release checklist anywhere; the steps
+are scattered over plan §17.1–17.7, §8.1–8.2, §12.2 and `worker/README.md`, and
+none of them states the order. Then **run reader agents over it and iterate**.
+The user asked for the documentation skill for this.
+
+Shape agreed before the compact: a numbered, checkable order, each step carrying
+the exact command, what its output should look like, what it protects against,
+and what to do when it fails. Plan = why; RELEASE.md = which keys in what order.
+Then execute this release against it and fill in the observed numbers, so the
+document is verified rather than imagined.
+
+Skeleton sketched (unreviewed): 0 preflight → 1 scan → 2 map → 3 publish →
+4 gate → 5 upload to R2 → 6 export → 7 verify → 8 deploy (`TPUF_NAMESPACE` in
+wrangler.toml + `wrangler deploy`) → 9 live acceptance → 10 purge the zone cache
+→ 11 delete the old namespace, update `pipeline/`.
+
+### Two decisions the user has NOT made
+
+1. **Does Q13 ride with this re-export?** (`_` and `.` kept as matchable tokens
+   — plan §16.8's Q13, user 2026-08-25 "有必要重新导入", deferred until the front
+   end shipped, which it has.) Marginal cost zero if combined; a separate
+   re-export otherwise. It needs both tokenizer implementations changed, the
+   `tokenizer_rule` bumped, asset + `expected.json` regenerated, and COPY
+   §0/§3.5/§5.1 rewritten and reader-tested.
+2. **Is `publish` + `gate` + the R2 upload part of this release?** The user said
+   "要重新 publish" when asking for the checklist, so presumably yes — confirm.
+   Without it the ~12,751 records new since the last publish have links that land
+   at the top of a page instead of on their line.
+
+### Still deferred, unchanged
+
+Sitemaps (§9.4, ~1.34 M URLs); an authenticated endpoint over `stats()`/`geo()`;
+the 10.7 s first-request latency after an idle period (three candidate causes,
+one measurement, needs a spaced probe); thin-space vs comma digit grouping
+(COPY §1's rule stands).
+
+### Rulings made today, all already in COPY and the plan
+
+- The `.ML` source line prints `$AFP/AutoCorres2/utils.ML:123` and
+  `~~/src/HOL/Nominal/nominal_thmdecls.ML:175`, `~~` unchanged.
+- COPY §4.4's coverage figure: 99.28 %, not the pre-backfill 80.2 %.
+- The entity page section is `Theories of the constants used`, theorems only.
+- `Defined in <theory>` sits **under the statement box, outside it** — the first
+  attempt put it inside the Source block, where the user could not find it.
+  Always shown; omitted only when there is no theory; **not on the result card**.
+- `constituent_theories` is sorted by the export.
