@@ -1083,16 +1083,40 @@ this paragraph with §2's; the paragraph below names those four kinds anyway.)
 
 **How a search works**
 
-> A query is required. Isasearch compares it with an English explanation of every
-> entity, using the embedding model «fireworks/qwen3-embedding-8b», and puts the
-> results in that order. Only the best 200 appear.
+> A query is required, because a search is a comparison of meanings. Every
+> entity carries an English explanation (see "About the explanations" below).
+> When the index was built, the embedding model «fireworks/qwen3-embedding-8b»
+> read each explanation and produced its
+> [embedding](https://en.wikipedia.org/wiki/Sentence_embedding): a vector of
+> 4 096 numbers, positioned so that texts with similar meaning lie near each
+> other and unrelated texts lie far apart. When you search, the same model
+> turns your query into a vector of the same kind.
 >
-> The syntactic filters are optional. They decide which entities are eligible to
-> be ordered at all; they do not change the order.
+> The search itself is geometry: a
+> [nearest-neighbour search](https://en.wikipedia.org/wiki/Nearest_neighbor_search)
+> for the entities whose vectors lie closest to your query's, closeness being
+> [cosine similarity](https://en.wikipedia.org/wiki/Cosine_similarity) — the
+> number on every card. When your conditions narrow the field far enough,
+> Isasearch computes the similarity to every eligible entity, and the ranking
+> is exact. When the field stays large, scoring «1 230 467» vectors one by one
+> would be too slow, so an
+> [approximate index](https://en.wikipedia.org/wiki/Nearest_neighbor_search#Approximation_methods)
+> inspects only the most promising regions of the vector space instead — fast,
+> and measured to agree with the exact ranking on all but a few of the 200;
+> when it returns fewer rows than the conditions are known to allow, Isasearch
+> detects that and recomputes exactly.
+>
+> The syntactic filters are optional. They decide which entities are eligible
+> to be ordered at all; they do not change the order. Only the best 200 appear.
 
-(§4.5, and §2's deleted paragraph recast. *New* in this form, 2026-08-25: the
-BM25 paragraph went with the checkbox, and what replaced it says plainly what
-"semantically" in the landing page's first sentence means.)
+(§4.5, and §2's deleted paragraph recast; the BM25 paragraph went with the
+checkbox 2026-08-25. **Expanded 2026-08-26 at the user's request** — "建议详细
+讲一下 semantic embedding 与 kNN 的工作原理。最好能链接到 wikipedia" — under
+the delegated editorial authority. The exact/approximate account matches plan
+§6.3c: exact below the routing line, approximate above it with the measured
+overlap, and the under-fill fallback stated as detection-and-recompute. The
+routing line's value is internal and not printed. The links render as links;
+they are the interface's only external references besides source pages.)
 
 **How a condition is matched — deleted 2026-08-26.** The user: "现在我们用正则
 表达式了，大家都知道是怎么做的，根本不需要给这些细节" — the site's readers are
