@@ -3905,9 +3905,21 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
 
   Two lessons worth keeping: a filter-only query with `rank_by ["id","asc"]` early-exits
   at `top_k` and understates weak-literal cost by an order of magnitude, so
-  `aggregate_by` is the only clean exhaustive metric; and `Regex` is consistently
-  **~1.6× cheaper than `Glob`**, which inverts this section's earlier framing of glob as
-  the safe option. One column declared `{"type":"string","glob":true,"regex":true}` is
+  `aggregate_by` is the only clean exhaustive metric; and `Regex` is **1.4–1.7× cheaper
+  than `Glob` on the conditions where the filter costs anything at all** — measured at
+  all three sizes on the five weak-literal conditions (`x + y` through `_ + _`). On a
+  selective condition both sit at 10–12 ms and the ratio is 1.0, because a rare anchor
+  lets each engine's literal prefilter discard nearly everything: an unmatched pattern
+  is 10 ms over 1.2M rows. So "Regex is cheaper" is true where it matters and empty
+  where it does not, and it inverts this section's earlier framing of glob as the safe
+  option without being the reason to choose Regex.
+
+  **The reason to choose `Regex` is the escaping, not the speed.** On the leg the site
+  actually sends — vector ANN with `top_k` — nothing exceeded 49 ms for any mechanism at
+  any size, against an end-to-end search of 1000–1700 ms, so this cost difference is
+  invisible to a visitor. What is not invisible is that globset has **no JavaScript
+  library**, and its intuitive escape is wrong (`[!]` and `[^]` are HTTP 400), whereas
+  `escape-string-regexp` is verified against the live service. One column declared `{"type":"string","glob":true,"regex":true}` is
   accepted and serves both, so the export need not choose a dialect. Storage: the three columns are ~280 MB against a namespace whose
   11.0 GB of 11.5 GB is vectors — **2.4 %**, so the binding constraint is not bytes but
   §8.2, which makes a column omitted now cost a full re-export to add.
