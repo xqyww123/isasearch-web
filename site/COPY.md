@@ -1083,67 +1083,22 @@ this paragraph with §2's; the paragraph below names those four kinds anyway.)
 
 **How a search works**
 
-> Isasearch searches by meaning, not by matching words. It can do this because
-> every entity carries an English explanation (see "About the explanations"
-> below), and because meaning can be turned into geometry: when the index was
-> built, each explanation was placed as a point in a space of 4 096 dimensions —
-> its [embedding](https://en.wikipedia.org/wiki/Sentence_embedding) — so that
-> explanations with similar meaning lie close together and unrelated ones lie
-> far apart. The model that does the placing, «fireworks/qwen3-embedding-8b»,
-> turns your query into a point in the same space when you press search.
->
-> Beside the query you may add conditions in the Syntactic Filters panels — a
-> condition such as requiring the name to contain `sorted`. A condition never
-> affects the order; it only decides which entities are eligible. A search shows
-> the 200 eligible entities whose points lie closest to your query's — all of
-> them, when fewer than 200 are eligible. Closeness is the
-> [cosine similarity](https://en.wikipedia.org/wiki/Cosine_similarity) printed
-> on every card: higher means closer; 1 would mean identical, 0 unrelated. That
-> is why a query is required: a condition can only shrink the pool, the query is
-> what orders it, and Isasearch always answers in that order — a dozen eligible
-> entities are still shown nearest-first.
->
-> The ranking itself is a
-> [nearest-neighbour search](https://en.wikipedia.org/wiki/Nearest_neighbor_search),
-> run in one of two ways. A condition is a plain test of an entity's text, cheap
-> enough to run over every entity, so before ranking anything Isasearch counts
-> exactly how many are eligible; the count decides which way runs, and it
-> returns at the end of this paragraph. When the eligible entities are few
-> enough — roughly, tens of thousands — Isasearch measures the closeness of
-> every one: the ranking is exact. When they are many (with no conditions at
-> all, all «1 230 467» are eligible), measuring each one for every search would
-> be too slow, so an
-> [approximate index](https://en.wikipedia.org/wiki/Nearest_neighbor_search#Approximation_methods)
-> takes over: when the index was built, every point was assigned — knowing
-> nothing of your conditions — to a group of near neighbours, and each group has
-> a centre; the search opens only the groups whose centres lie nearest your
-> query and ranks the eligible entities inside them. The groups are coarse, so
-> an eligible entity can be close to your query while its group as a whole is
-> not; it is then never seen at all. That is the price of the speed. If the
-> approximate search comes back with fewer than 200 results although the
-> eligibility count said at least 200 exist, some were certainly missed, and
-> Isasearch redoes the search the exact way — slow, but rare, and correctness is
-> worth the wait. If it fills all 200, there is no way to tell whether anything
-> was missed: a missed entity's place is taken by a slightly farther one, and no
-> count can reveal the swap. In testing, that error was usually a few entries
-> out of the 200, and a few dozen in the worst of the cases tried.
+> Isasearch uses an [embedding model](https://en.wikipedia.org/wiki/Sentence_embedding)
+> («fireworks/qwen3-embedding-8b» in the current configuration) to turn your
+> natural-language query, and the pre-generated natural-language explanations of
+> all Isabelle entities (see "About the explanations" below), into vectors in a
+> high-dimensional space. In this vector space, the distance between two vectors
+> reflects how close they are in meaning. Isasearch then uses a
+> [k-NN search](https://en.wikipedia.org/wiki/Nearest_neighbor_search) to find
+> the entities whose vectors lie closest to the vector of your query, and
+> returns those entities as the results. This is the standard approach in
+> machine learning, known as
+> [semantic search](https://en.wikipedia.org/wiki/Semantic_search).
 
-*(Rewritten 2026-08-26 at the user's request ("详细讲一下 semantic embedding 与
-kNN 的工作原理", with Wikipedia links) and then refined through four rounds of
-blind reader testing — two personas per round, an Isabelle researcher with no
-machine-learning background and a software engineer with no Isabelle — until
-both passed: correct answers to comprehension questions and no stumble that
-survives a first read. What the rounds forced, in order: the original opener "A
-query is required" replaced by the meaning-vs-words contrast; one term
-("condition") with a concrete example, introduced before use; the card number
-given its direction and anchors; the eligibility count stated where it is used,
-with its purpose announced; the miss mechanism made concrete (groups with
-centres, built blind to conditions); "measuring each one would be too slow"
-scoped to *every search* so the exact redo is not a contradiction; the
-detection's limit stated honestly — a full 200 hides any miss, and the measured
-error is given with its worst case, not just its typical one. The
-exact/approximate account matches plan §6.3c; the routing line's value stays
-internal ("roughly, tens of thousands" drifts with the corpus and stays true).)*
+*(The user's own structure, dictated 2026-08-26 and translated verbatim, after
+he rejected two of the implementation's drafts — a long self-made explanation
+and an over-compressed telegram. Standard concepts get their standard names and
+links; the page explains nothing itself.)*
 
 **How a condition is matched — deleted 2026-08-26.** The user: "现在我们用正则
 表达式了，大家都知道是怎么做的，根本不需要给这些细节" — the site's readers are
