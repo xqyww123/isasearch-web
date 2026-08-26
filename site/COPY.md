@@ -72,8 +72,11 @@ Numbers of four digits or more are grouped with a **non-breaking thin space** �
 continental Europe, and draft 2 mixed bare `1000` with spaced `1 300 000`. Digits
 throughout, never words: `11 kinds`, not "eleven kinds".
 
-**Nothing in this file is open.** The four labelling choices raised by draft 2
-were settled by the user on 2026-08-14; §11 records them.
+**Open until the re-export release (2026-08-26):** §0, §3.2, §4.5's new
+trigger, §5.1, §5.3, §5.6, §5.8 and §6's `regex_timeout` sentence describe the
+regex-era interface and ship with the re-export; until it lands the built site
+serves the pre-regex strings. Everything else is what the built site serves.
+(The four labelling choices of draft 2 were settled 2026-08-14; §11.)
 
 ## 2. The landing page
 
@@ -167,8 +170,9 @@ readers reported the heading "All" as unreadable in place. The copy that
 explained it goes with it — §3.3's line below the panel is deleted too. Nothing
 replaces the ability: **there is no way to ask for "in any one of the three"**,
 and typing the same text into three panels asks the opposite (all three must
-contain it), which almost never matches. The API still accepts `on: "all"`, so
-the panel can return without a protocol change.
+~~The API still accepts `on: "all"`, so the panel can return without a
+protocol change.~~ (Deleted from the API 2026-08-26, user-ruled — the panel's
+return would now be a protocol change.)
 
 ### 3.1 Panel headings — no hover text (ruled 2026-08-25)
 
@@ -196,7 +200,7 @@ condition reads:
 there is no mode and no switch — the earlier regex-switch design of the same
 day is superseded). The box's placeholder, user-ruled:
 
-> a regular expression
+> a regular expression (Rust regex syntax)
 
 Its hover (updated from the approved switch-hover after the raw-text ruling —
 the "parts joined by newlines" clause became false):
@@ -206,7 +210,16 @@ the "parts joined by newlines" clause became false):
 > not — paste the symbol itself instead.
 
 Abbreviation expansion is retired from condition boxes (user-ruled: "完全放弃
-缩写"); it never applied to the search box.
+缩写"); it never applied to the search box. Three things happen in the box
+itself (2026-08-26 rulings): typing a known Isabelle `\<symbol>` form inserts
+its character the moment the closing `>` completes it (table: the exported
+`symbols.json`; an unknown name stays as typed, deliberately with no warning);
+pasting replaces every whitespace run that contains a line break with `\s+`
+(the box cannot hold a line break, and statements contain real ones); and an
+invalid pattern outlines the box in red with the engine's own message beneath
+it, live (validator: a WASM build of the same Rust regex dialect — never
+JavaScript's `RegExp`, which is a different dialect). A search carrying an
+invalid pattern is blocked client-side.
 
 ### 3.3 — deleted 2026-08-25 with the All panel
 
@@ -278,10 +291,9 @@ before the point could arrive. What stands now says what each panel is matched
 against, which is the fact two independent readers reported missing everywhere
 on the site, and it says it in always-visible text rather than in a hover.)*
 
-*(The full matching rules — the separator class, operators standing as parts of
-their own, whole-part matching, the order rule, spacing — live in the empty
-states (§5.1), which teach them at the moment they bite; the about page's
-restatement was deleted 2026-08-26, see §14.)*
+*(There is no fuller matching teaching anywhere — user-ruled 2026-08-26
+("千万别写"): the rule lives in the condition box's placeholder and hover, and
+bites in §5.1's escaping reminder.)*
 
 ### 3.6 The Kind buttons
 
@@ -549,6 +561,16 @@ block lost its sentence about the notice with it.
 > it. Characters that are regular-expression syntax — `+ * ( ) [ ] { } | . ? ^
 > $ \` — must be backslash-escaped to be matched as text.
 
+For an `excludes` condition the body inverts — the pattern is too broad, not
+mis-escaped:
+
+> **Everything left matches this exclusion**
+>
+> «Expression excludes `pattern`»
+>
+> Every entity that satisfies your other conditions matches this pattern, so
+> none is left. Make the exclusion narrower, or remove it.
+
 *(Rewritten 2026-08-26 for the regex ruling. The old section taught the
 token-matching rules at their bite point — operators as parts, the 45 % `⟹`
 figure, the advice to exclude names rather than operators — all of which died
@@ -565,9 +587,9 @@ control, and an `excludes` condition prints as `excludes`.
 >
 > A result must satisfy every condition. These are active:
 >
-> - Expression contains `sorted_wrt` — *[remove]*
-> - Entity Name excludes `List` — *[remove]*
-> - Theory Name contains `HOL-Analysis` — *[remove]*
+> - Expression matches `sorted_wrt` — *[remove]*
+> - Entity Name does not match `List` — *[remove]*
+> - Theory Name matches `HOL-Analysis` — *[remove]*
 >
 > Try removing one. Your query is not the cause: the conditions decide which
 > entities are eligible, and none is. The query only puts eligible entities in
@@ -589,8 +611,13 @@ whose escaping reminder is the likelier cure).
 > The pattern is matched against the text as displayed. Check the spelling,
 > escape regular-expression syntax meant as text, or remove the condition.
 
+An `excludes` condition gets §5.1's inversion with the panel name swapped.
+
 *(Rewritten 2026-08-26; the whole-parts teaching it carried died with
-tokenization.)*
+tokenization. List items here and in §5.2 print the relation, not the toggle —
+"Expression **matches** `…`" / "Entity Name **does not match** `…`" — because
+"contains" misreads for anchored patterns like `^List\.`; the control's own
+labels stay `contains`/`excludes`, D22.)*
 
 ### 5.4 The kind selection alone is the cause
 
@@ -614,7 +641,10 @@ genuine backend failure is §6's territory, which already covers it.
 
 *(Rewritten 2026-08-26. The old text explained the divider class — gone with
 tokenization. The rejection itself is load-bearing and pre-request: an empty
-pattern was measured to match every row, which D7 forbids.)*
+pattern was measured to match every row, which D7 forbids. The client flags the
+empty box inline with this string instead of silently dropping the condition;
+whitespace-only text is a legal pattern, not an empty one; the Worker keeps the
+same check as a backstop.)*
 
 ### 5.7 The search box is empty
 
@@ -637,6 +667,13 @@ names the defect better than a paraphrase would, and its messages are legible
 > with the site and not with your query.
 
 > No connection to the site.
+
+When a search carrying a regex condition exceeds its time limit
+(`regex_timeout`; the site-fault sentence above must NOT be shown for it —
+here the query is the cause and the visitor has the remedy):
+
+> The search took too long. This pattern has to be checked against every
+> entity; make it more specific.
 
 ## 7. Limits
 
@@ -936,7 +973,7 @@ are D29 and D35.
 
 ## 13. Why the two name forms differ
 
-§3.1's Entity Name hover tells visitors that an entity name is qualified by the
+§3.1's Entity Name hover told visitors (the hovers are gone since 2026-08-25, and on 2026-08-26 the user ruled against re-homing the fact in §3.5 — the interface now states it nowhere; this section remains the record of the fact itself). Originally: that an entity name is qualified by the
 theory's base name and carries no session prefix — `Path_Connected.path_image_join`
 — while the Theory Name panel takes the session-qualified form,
 `HOL-Analysis.Path_Connected`. That is not an inconsistency to fix: an Isabelle
@@ -1017,20 +1054,23 @@ links; the page explains nothing itself.)*
 表达式了，大家都知道是怎么做的，根本不需要给这些细节" — the site's readers are
 power users; regex semantics are common knowledge, the dialect's limits announce
 themselves through §5.8's verbatim engine message, and the one fact that cannot
-be inferred — the pattern is matched against the entity's parts joined by
-newlines — is the regex switch's hover (§3.2), one line, exactly where the
+be inferred — the pattern is matched against the text as displayed — is the condition box's hover (§3.2), one line, exactly where the
 reader is. The section had carried §3.5's two paragraphs, the "matches text,
 not patterns" paragraph, and (for a few hours) a regular-expressions teaching
-section; the token-sequence matching rule is still taught where it bites, in
-the empty states (§5.1–§5.3).
+section; the empty states (§5.1–§5.3) were themselves rewritten for the regex
+rule later the same day.
 
 **About the explanations**
 
 > Every entity carries an English explanation. It is written by a language model
 > from the formal statement, not by the theory's authors. It may be imprecise or
 > wrong. Where the explanation and the statement disagree, the statement is the
-> correct one. Isasearch searches this text as well, so an entity with a poor
-> explanation may rank lower than it deserves.
+> correct one.
+
+*(The closing sentence "Isasearch searches this text as well, so an entity
+with a poor explanation may rank lower than it deserves" was deleted
+2026-08-26 — §4.2 struck its twin on 2026-08-25 as imprecise; the about page
+follows.)*
 
 (The first sentence *new*; the rest §4.2, D30.)
 

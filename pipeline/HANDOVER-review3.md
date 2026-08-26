@@ -1109,3 +1109,28 @@ approved. Docs rewritten (plan Q14 "THE FINAL RULING", Q13 banner, §6.3, §6.3c
 v2, §5/§16.6 scope notes; COPY §0/§1/§3.2/§3.5/§5.1/§5.3/§5.6). NEXT: the user
 wants ONE MORE REVIEW ROUND over the rewritten design before implementation;
 then the M3 raw-text sweep (launch gate), then the router build.
+
+## ADDENDUM (2026-08-26, night): re-review folded in; all rulings closed
+
+The second review round (two fresh reviewers over the rewritten docs) returned
+28 + 15 findings — mostly stale text the big rewrite missed, plus real catches:
+my "~25 s structural bound" was wrong arithmetic (true worst 35 s / 47 s with
+an ANN retry); on:'all' was contradicted three ways; the \<symbol> table had
+no surviving home; a leading `?` in a pasted theorem is a parse error; markup
+escapes (\<^sub> …) are untranslatable; multi-line pastes die in an <input>.
+Every finding is now folded in, under these user rulings: 35 s accepted with
+timeout-retries restricted to ≤8 s legs; live WASM Rust-regex validation with
+red outline + engine message (JS RegExp forbidden as validator); the newline→
+\s+ paste handler; placeholder "a regular expression (Rust regex syntax)"; no
+`?` hint line; live \<symbol> replacement as an input-method feature with NO
+warning for unknown names; no §3.5 foot-line addition ("千万别写"); on:'all'
+deleted from the API; and the SENTINEL MECHANISM DELETED ENTIRELY ("绝对不能
+这样写代码" — a cold-isolate page view paid a cross-ocean turbopuffer read):
+ROWS/ENTITIES/BUILT live in wrangler [vars], checklist-synchronized, probe-
+verified (ROWS within 1 % of approx_row_count); symbols.json becomes a static
+asset; .asset namespaces retire. Measured tonight: turbopuffer's 4xx does NOT
+echo the offending pattern (one-line reason, column name only), so error
+attribution is the client validator's job and the server 4xx renders page-level
+via §5.8. NEXT: implementation can start on the user's word — router first
+(§6.3c is the spec), then the re-export release (regex:true, drop *_subtokens,
+symbols.json, no sentinel), with the raw-text overlap sweep as its launch gate.
