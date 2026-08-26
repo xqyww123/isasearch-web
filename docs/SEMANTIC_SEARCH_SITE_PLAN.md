@@ -3953,51 +3953,94 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   narrowing that the warning itself sanctions is free here, because a wildcard pattern's
   literal runs are **logically implied by** the regex and so cannot change the result set.
 
-  **An observed failure, a workaround that repairs it, and NO explanation — read this
-  before building anything.** What follows is measured; the mechanism behind it is not
-  known, and the first write-up of it here (2026-08-26) asserted a cause that was
-  invented rather than verified. Until the cause is found, treat the workaround as
-  empirical: it repaired every case measured, and nobody can say where it stops.
-  Bare `Glob` and bare `Regex` **silently return far fewer rows than `top_k`** as the
-  namespace grows: at 1.2M rows the condition `x + y` (2,831 true matches) returned
-  **41 of 200**, at 400k it returned 97, at 100k it was fine — and `ContainsTokenSequence`
-  returned a full 200 at every size. The rows returned are all genuine; there are just
-  far too few of them, with nothing to signal it. It is **not a clean function of
-  selectivity**: `finite _ set` at 0.267 % was unaffected while `x + y` at 0.236 % was,
-  and `x + y` itself ranged from 62 to 200 rows depending only on the query vector — so
-  it turns on where the matching rows sit in embedding space, which makes it
-  unpredictable rather than a threshold anyone could design around. Conjoining the
-  pattern's literal runs restored 200 of 200 in every case measured, and cannot change
-  the answer because the runs are logically implied by the pattern — verified, all five
-  mechanisms agreed on the exact ground-truth id set for every condition in every
-  namespace. So the compiled filter should be
-  `And([ContainsTokenSequence(run₁), …, Regex(pattern)])` and never the pattern alone —
-  **but that is a rule derived from a repair whose mechanism is unknown, not from an
-  understanding of the engine.**
+  **The row loss, root-caused (2026-08-26, follow-up session).** The first write-up of
+  this failure asserted an invented cause; a dedicated investigation then found the real
+  one. The failure as first measured: bare `Glob` and bare `Regex` **silently return far
+  fewer rows than `top_k`** — at 1.2M rows the condition `x + y` (2,831 true matches)
+  returned 41 of 200 while `ContainsTokenSequence` returned a full 200; the count varied
+  with the query vector (62–200) and, it later turned out, with the index build (a
+  byte-identical rebuild of the same 1.2M rows returned 74 where the first build
+  returned 41). The mechanism, established by measurement:
 
-  **And there is a contradiction nobody has explained.** turbopuffer's documentation
-  attaches the partial-postfilter recall warning to `ContainsTokenSequence` and not to
-  `Glob`/`Regex`. The measurements are the exact reverse: `ContainsTokenSequence` showed
-  **no** loss anywhere, including on the live 1,337,009-row namespace with real vectors,
-  set-wise and rank-wise against locally computed ground truth — while `Glob` and
-  `Regex`, which carry no such warning, are the ones that lose rows. An unexplained
-  inversion of the vendor's own documentation means the model of this subsystem is
-  wrong somewhere, and a silent-failure mode is the worst place to be wrong.
+  turbopuffer evaluates a `Glob`/`Regex` filter under an ANN query on one of **two
+  paths**, chosen per pattern. Call them the **indexed path** — the pattern index
+  (changelog 2026-02: "Regex index") pre-locates the matching rows, the ANN search is
+  directed to them, and recall is exact — and the **neighborhood path** — the ANN
+  search explores a bounded region around the query vector and the pattern is applied
+  to that region only, so the query returns **only the true matches that happen to lie
+  inside the explored region**. Everything observed follows from this: the loss varies
+  with the query vector (a different vector explores a different region), grows with
+  `top_k` but never reaches the true count (a larger `top_k` widens the region), skips
+  matches in contiguous rank bands (whole clusters lie outside the region — measured:
+  the rows kept from the full-recall ranking were 74 scattered over ranks 0–1888, with
+  the rank-1 match among the skipped), and differs between index builds of identical
+  data (clustering is randomized). Five independent signatures separate the two paths,
+  all measured on the 1.2M probe namespace: filter-only scan cost (indexed 12–77 ms,
+  neighborhood-path patterns 129–385 ms — near-full scans), ANN latency (13–35 ms vs a
+  tight 38–42 ms band), saturation (indexed-path conditions return exactly
+  `min(true, top_k)` at every `top_k`; neighborhood-path conditions plateau below it,
+  e.g. `a = b` with 2,608 true matches returned 1,081 at `top_k` 3200), query-vector
+  dependence (neighborhood path only), and the contiguous-band skip shape. Which path a
+  pattern gets **correlates with the row frequency of its most common required token**:
+  every measured condition whose tokens all stay under ~7 % of rows (`n + 1`, `i < n`,
+  `xs ys`, `finite _ set`, `poincare _ mapsto`, …) rode the indexed path with exact
+  recall at every `top_k` and every vector; every condition containing a token above
+  ~23 % (`x` at 278k rows, `=` at 587k of 1.2M) rode the neighborhood path (`x + y`,
+  `x * y`, `x - y`, `a = b`, `f x = x`). The exact rule is turbopuffer-internal — the
+  boundary between 7 % and 23 % was not located, and attempts to defeat the index with
+  semantically identical rewrites (character classes, `{1,2}` repetitions, duplicate
+  alternations) never dislodged a pattern from the indexed path, so the index is
+  automaton-based rather than naive-literal-extraction. Selectivity of the whole
+  condition is irrelevant — `poincare _ mapsto` at 0.005 % (61 matches) returned all 61
+  everywhere, fifty times more selective than the failing `x + y`.
 
-  **What is NOT known, and what would settle it.** Three experiments, in order of cost:
-  (1) if the cause is a fixed ANN candidate budget followed by post-filtering, then
-  raising `top_k` should recover rows roughly in proportion — bare `Regex` at
-  `top_k` 2000 should return ~410 usable rows, not a full 200; if it returns a full 200
-  the hypothesis is wrong and the cause is elsewhere. (2) Ask turbopuffer: the `Regex`
-  warning itself says to contact them, and their docs reference a "Native Filtering"
-  article on how filters combine with ANN. (3) Measure the case that was never measured
-  — the `All` panel's three-way `Or` of narrowed filters, and cross-field combinations,
-  which is where an unexplained repair is most likely to stop working.
+  **The documentation contradiction is resolved — the docs were right and the earlier
+  reading was wrong.** The `Regex` warning ("Currently requires exhaustive evaluation;
+  not recommended for large namespaces or ANN queries **unless used in conjunction with
+  other selective filters**") describes precisely the neighborhood path and prescribes
+  precisely the repair below. `Glob` carries no such warning but shares the machinery —
+  in every measurement bare `Glob` and bare `Regex` returned identical row sets. And
+  the `ContainsTokenSequence` warning ("a partial postfilter which may lead to reduced
+  recall on ANN queries") is **also real**: the earlier "no loss anywhere" measurement
+  had simply never tried a condition made of ubiquitous tokens (see next paragraph).
 
-  **Do not write this feature into an implementation plan until (1) or (2) answers the
-  question.** The probe scripts and every raw log are preserved at
-  `~/isasearch-pipeline/regexprobe/`; the probe namespaces themselves were deleted, so
-  reproduction costs a rebuild (~25 minutes for 1.2M rows at 64 proxy dimensions).
+  **The repair reduces the loss but does not eliminate it.** Conjoining the pattern's
+  literal runs — `And([ContainsTokenSequence(run₁), …, Regex(pattern)])` — cannot
+  change the answer (the runs are logically implied by the pattern) and restored full
+  recall in most measured cases, including the cross-field `Or` shape of the `All`
+  panel and every wildcard condition with a sub-7 % token. But on conditions built
+  entirely from ubiquitous tokens the conjoined form still loses, because
+  `ContainsTokenSequence` is itself a partial postfilter on the same lossy machinery:
+  measured on the probe namespace, repaired `x - y` returned 134 of 200 at `top_k` 200
+  and repaired `a = b` returned 2,319 of 2,608 at `top_k` 3200.
+
+  **The bigger discovery: production loses rows today, without any wildcard.** The live
+  namespace's only condition mechanism is bare `ContainsTokenSequence`, and on
+  conditions dominated by the corpus's most frequent token — `=`, which equality puts
+  in essentially every theorem — it collapses. Measured on the live 1,337,009-row
+  namespace with real 4096-dim vectors (read-only): `f x = x` has **142** true matches
+  and returned **2, 1, 6, 0** rows across four query vectors at `top_k` 200 (2 at
+  `top_k` 3200); `a = b` has 2,928 and returned 47–106, saturating at 106; `x = y` has
+  14,880 and returned 438 at `top_k` 3200. Meanwhile `x + y`, `x * y`, `x - y` were
+  exact on production at every `top_k` — the frequency profile of *this* corpus decides
+  which conditions break, so the probe namespace (where `x + y` fails) and production
+  (where `f x = x` fails) disagree about individual conditions while obeying the same
+  rule. The earlier all-clear on production tested seven conditions that all happened
+  to sit on the indexed path. **This is a standing correctness defect of the live
+  search, independent of Q14, with no known in-engine mitigation** — raising `top_k`
+  saturates below the true count, and a condition of all-common tokens offers no
+  selective conjunct to add. What to do about it (report to turbopuffer with the
+  reproduction, mitigate, or accept and document) is the user's call, not settled here.
+
+  **Status.** The mechanism question that blocked Q14 is answered; what remains open is
+  the design ruling in light of it — the wildcard feature would inherit exactly the
+  production defect's failure class for all-common-token conditions, no worse and no
+  better. Asking turbopuffer remains worthwhile and now comes with a precise
+  reproduction. Probe scripts and raw logs: `~/isasearch-pipeline/regexprobe/`
+  (`topk_probe.py` is the discriminating experiment; `topk-run1.txt` the steady-state
+  table). The probe namespace `isasearch-regexprobe-64d-1200k` was deliberately left
+  alive as the reproduction substrate for a turbopuffer conversation — delete it once
+  that is settled (a rebuild costs ~12 minutes via `build.py`).
 
   **The 4 KiB filterable-value limit does not apply** (measured 2026-08-26, closing this
   question): a `{"type":"string","glob":true,"regex":true}` column accepted a

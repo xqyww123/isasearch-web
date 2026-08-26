@@ -1009,3 +1009,57 @@ Cleanup outstanding: `isasearch-preview-20260826` and its `.asset`; the
 queries took 9.2 s and 9.6 s, against a steady state of 21–40 ms. Probably the same
 thing as the long-deferred "10.7 s first request after idle" — now with a second
 observation and a known trigger.
+
+## STATE AFTER THE ROOT-CAUSE INVESTIGATION (2026-08-26, post-compact session)
+
+The question the last handover led with — why bare `Glob`/`Regex` returned 41 of
+200 — is answered. The full account, with every number, lives in plan §13 Q14
+("The row loss, root-caused"); this section is the pointer plus what it changed.
+
+**The mechanism in one paragraph.** Under an ANN query turbopuffer evaluates a
+`Glob`/`Regex` filter on one of two paths, chosen per pattern: an **indexed path**
+(the 2026-02 pattern index pre-locates matching rows; recall exact at every
+`top_k` and every vector) and a **neighborhood path** (the ANN search explores a
+bounded region around the query vector and the filter applies only inside it; the
+query returns only the true matches that lie in the region). 41 = matches of
+`x + y` inside the region explored for that vector on that index build; a
+byte-identical rebuild returned 74. Path assignment tracks the row frequency of
+the pattern's most common required token (all tokens ≤ ~7 % of rows → indexed;
+any token ≥ ~23 % → neighborhood; boundary not located). Five measured
+signatures separate the paths — filter-only scan cost, ANN latency band,
+`top_k` saturation, query-vector dependence, contiguous-band rank skips.
+The vendor docs turned out to be right and previously misread: the `Regex`
+warning describes exactly this and prescribes exactly the conjunction repair.
+
+**What it changed, in decreasing severity:**
+
+1. **Production loses rows today, without any wildcard.** Bare
+   `ContainsTokenSequence` — the live site's only condition mechanism — is a
+   partial postfilter on the same machinery, and on conditions dominated by `=`
+   (the corpus's most frequent token) it collapses on the live namespace with
+   real vectors: `f x = x` (142 true) returned 2/1/6/0 across four vectors;
+   `a = b` (2,928 true) returned 47–106, saturating at 106 at `top_k` 3200;
+   `x = y` returned 438 of a possible 3,200. The earlier "no loss on
+   production" verdict tested seven conditions that all sat on the indexed
+   path. No in-engine mitigation is known. **What to do about it is the
+   user's call** — report to turbopuffer (the reproduction is ready), mitigate,
+   or accept and document.
+2. **The Q14 repair is real but not airtight**: conjoined
+   `And([ContainsTokenSequence(run…), Regex(pattern)])` restores exact recall
+   everywhere except conditions built entirely from ubiquitous tokens, where it
+   inherits the production defect above (repaired `x - y`: 134 of 200 on the
+   probe namespace). The cross-field `Or` (the `All` panel shape) adds no loss
+   of its own — measured, repaired branches stay exact wherever single-field
+   repaired filters are exact.
+3. **Q14 is unblocked as a mechanism question**; the remaining decision is
+   design: the wildcard inherits exactly the same failure class as production's
+   existing conditions, no worse and no better.
+
+**Reproduction assets**: `~/isasearch-pipeline/regexprobe/` — `topk_probe.py`
+(the discriminating experiment; `topk-run1.txt`/`topk-run2.txt` are the stable
+tables), `build.py` (~12 min for the 1.2M namespace). The probe namespace
+`isasearch-regexprobe-64d-1200k` is deliberately left alive as the reproduction
+substrate for a turbopuffer conversation; delete it once that is settled.
+
+**The 9.5 s cold first query reproduced a third time** (9.18 s, first CTS query
+on production after a burst of aggregate/filter-only queries).
