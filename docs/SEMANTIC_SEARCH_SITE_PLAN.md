@@ -132,6 +132,16 @@ document, and a count that does not say which one it means is a defect.
 
 ## 2. LOCKED decisions
 
+**Four decisions below carry a 2026-08-26 amendment (Q14's final ruling —
+conditions are regular expressions over raw text); each original text stays as
+the record.** D4: the tokenizer no longer strips `?` — a schematic `?` in a
+pattern is regex syntax, and a leading one is a parse error surfaced live by
+the validator (red outline, engine message) and by COPY §5.8. D6: mid-identifier
+substrings ARE searchable now — `orted` matches `sorted_wrt`. D21: an
+expression condition compiles to `["expr","Regex",pattern]` and nothing else;
+`ContainsTokenSequence` appears nowhere. D23: no filterable subtoken arrays
+remain.
+
 D1–D20 were taken by the user on 2026-08-09, D21 on 2026-08-12, D22–D31 on
 2026-08-12/13, D32–D42 on 2026-08-13/14, and D43–D46 on 2026-08-17/18. Do not
 re-litigate; ask before deviating.
@@ -2268,6 +2278,14 @@ To stop them drifting:
 
 ### 6.1 Schema
 
+**Amended 2026-08-26 (Q14 final ruling; the block below is the pre-amendment
+record):** at the next re-export the raw `name`, `expr` and `theory` string
+attributes gain `regex: true` (storage otherwise unchanged; such columns default
+`filterable: false`, which they already are), and the three `*_subtokens`
+`pre_tokenized_array` columns are **deleted** — their only consumer was the
+token-sequence condition form, which no longer exists. Also deleted: the
+`.asset` companion namespace and its sentinel row (§8.2's banner).
+
 ```
 id               UUID  = a 128-bit hash of the universal key (§6.2); stable,
                        because D33's key repair runs before any export
@@ -2418,11 +2436,14 @@ introduced because the ANN rank mode silently loses filtered rows (§13 Q14,
 filter tree; it is not a second query form, not a mode the user selects, and
 not the fallback D21 deleted — the sentence above otherwise stands.
 
-An empty subtoken list must be rejected before it reaches turbopuffer: it would
-match everything (D7 also forbids the empty query outright). This is not a
-corner case under D21 — a condition consisting only of separators, such as `_`
-or `.` or `⇩`, reduces to the empty list, and the interface must say why it was
-rejected rather than silently dropping the condition.
+**Empty condition text must be rejected before it reaches turbopuffer**
+(amended 2026-08-26): an empty pattern is a VALID regular expression that was
+measured to match every row — the outcome D7 forbids. The predicate is "the
+text is empty"; whitespace-only text is NOT empty (a space is a meaningful
+pattern). The client flags an empty box inline (COPY §5.6) instead of silently
+dropping it; the Worker keeps the same check as a backstop. A pattern that
+merely HAPPENS to match everything (`.`, a lone `^`) is not rejected — it is a
+maximally dense condition and routes to the approximate branch.
 
 **`theory_subtokens` needs a separator.** A theorem-alike document carries a mean
 of 7.1 theory names, and `ContainsTokenSequence` matches across the whole array
@@ -2516,8 +2537,10 @@ selection routes like everything else. A search with no filter at all is plain A
 (kNN requires a filter). The entity page's ten-nearest list is out of scope. Since
 Q14's final ruling every condition is a regular expression compiled to a `Regex`
 filter over the raw `name`/`expr`/`theory` column; `excludes` is `Not(Regex)`
-(measured exact and composable); `on:'all'` is rejected while the All panel is
-absent from the interface.
+(measured exact and composable); `on:'all'` is **deleted from the API**
+(user-ruled 2026-08-26): `PANELS` loses `'all'`, the three-way `Or` compilation
+goes, COPY §2's "the API still accepts it" sentence is struck, the probe's
+`excludes(all)` check dies; the All panel's return would be a protocol change.
 
 **The protocol.**
 
@@ -2533,9 +2556,14 @@ absent from the interface.
 **Deadlines and retries (user-ruled 2026-08-26).** One principle: a leg is retried
 on timeout only when a timeout would be **anomalous** — decided before the request
 is sent, from the leg's expected cost class. A 4xx is never retried, whatever the
-class. **At most one retry per search.** There is deliberately **no total budget**
-(user-ruled): the table plus the one-retry rule bound the worst path structurally at
-~25 s, which is accepted and recorded here.
+class. **At most one retry per search, and a timeout retry is allowed only on
+legs whose deadline is ≤ 8 s** (user-ruled 2026-08-26 after the bound
+arithmetic was corrected — the 12/15 s legs never retry a timeout: the cold
+start succeeds inside their first attempt, so a timeout there means the work
+really is that large; transport-error/5xx retries are exempt). There is
+deliberately **no total budget** (user-ruled): these rules bound the worst path
+structurally at **~35 s** (8 s count + 12 s ANN + 15 s fallback), the corrected
+price at which it was accepted.
 
 | leg | expected cost | deadline | retry on timeout | on transport/5xx | on 4xx |
 |---|---|---|---|---|---|
@@ -2546,7 +2574,10 @@ class. **At most one retry per search.** There is deliberately **no total budget
 | kNN, exact branch | 86 ms–1.5 s (one >300 s hang after idle; 542 ms on retry) | 12 s | yes | retry once | never |
 | kNN, fallback branch | 5–8 s at the densities where it can fire | **15 s** | **no** | retry once | never |
 
-The 12 s deadlines are sized above the measured cold-start population, so the first
+**Every cost figure above was measured on the `\n`-joined subtoken columns,
+which this design drops**; the raw-text overlap sweep (the launch gate)
+re-derives them on the raw columns, and the deadlines are provisional until it
+does. The 12 s deadlines are sized above the measured cold-start population, so the first
 search after an idle gap succeeds on its **first** attempt — no retry heroics, and
 no dependence on whether an aborted fetch cancels turbopuffer's server-side work.
 The failure copy branches: COPY §6's "the problem is with the site and not with
@@ -2576,7 +2607,9 @@ violation and an error, never served), and its failure on the ANN branch
 record counts, `results.length` is cards (3–9 % apart): COPY §4.5's trigger is
 `complete`, never `count === results.length`. The count travels as data and is
 never displayed (D29). The `parts` field of the old response dies with
-tokenization. Errors: 4xx from turbopuffer carried structurally (status + body,
+tokenization, and `limit_reached` dies with it — `complete` is its successor
+and COPY §4.5's trigger; the app.js consumers of both change together. Errors:
+4xx from turbopuffer carried structurally (status + body,
 ≥ 2 KiB — the current 300-character slice would truncate the engine's multi-line
 parse errors) and mapped to `regex_rejected` (COPY §5.8, rendered through the
 existing escaped paths only), `condition_empty` (rejected in `compileRequest`:
@@ -2584,10 +2617,33 @@ an empty pattern was measured to match every row, so D7's rejection must happen
 before any request), or `bad_request`; 5xx/timeout exhaustion → `upstream`
 (COPY §6) or `regex_timeout` (its own sentence).
 
-**The 3 % line.** A fraction of the namespace's ROW count. The Worker learns the
-row count from the asset sentinel, which gains a `rows` field at the next export
-(`entities` is the D5-collapsed number, ~8 % low — using it would silently move
-the line to 2.76 %). Honest statement of the measured basis: the highest dirty
+**Input and validation (user-ruled 2026-08-26).** The condition box's
+placeholder is "a regular expression (Rust regex syntax)". Three input-method
+features run client-side, in the box: **live `\<symbol>` replacement** (a
+completed `\<known-name>` becomes its character the moment `>` is typed;
+table: the exported `symbols.json`; unknown names stay as typed, deliberately
+with no warning); **the paste handler** (every whitespace run containing a
+newline becomes `\s+` — HTML inputs strip pasted newlines while `expr` holds
+real ones, so without this a pasted two-line statement silently matches
+nothing); and **live validation by a WASM build of the Rust `regex` crate** —
+the server's own dialect, which is the point: JavaScript's `RegExp` MUST NOT
+validate (different dialect, false reds and false greens). An invalid pattern
+outlines its box in red with the engine's message inline, and the search is
+blocked client-side. The Worker applies NFC and nothing else — the box's
+content IS the pattern. The server 4xx is the drift backstop only; measured
+2026-08-26: turbopuffer's 400 body is one clean line naming the column but not
+the pattern nor the condition ("filter error in key `txt`: invalid regex
+pattern: repetition operator missing expression"), so server-side attribution
+is impossible and unneeded — the client attributes, the backstop renders
+page-level via COPY §5.8.
+
+**The 3 % line.** A fraction of the namespace's ROW count. The Worker reads
+the row count from `wrangler.toml [vars]` `ROWS` (user-ruled 2026-08-26; the
+sentinel mechanism is deleted, §8.2): the export prints it, RELEASE step 8
+pastes it beside `TPUF_NAMESPACE` in the same commit, and step 10's probe
+asserts it within 1 % of the namespace's `approx_row_count` (a tolerance check,
+never the source). `ENTITIES` is the D5-collapsed number, ~8 % low — a display
+number, never the denominator. Honest statement of the measured basis: the highest dirty
 full-200 overlap sits at 2.43 % (`= y`, 108/200) and the lowest clean point at
 2.42 % (`⟶`, ≥192/200) — clean and dirty INTERLEAVE there, so the line is not a
 measured boundary but a **margin, 0.57 percentage points above the highest
@@ -2595,10 +2651,12 @@ measured dirty point**, on one index build. The overlap table is per-build (a
 byte-identical rebuild moved a related figure 41→74) and per-corpus, so it is
 re-established at every release (RELEASE.md step 10) — and since every condition
 is now a regex, **the re-establishment must use regex conditions: the existing
-table is ContainsTokenSequence evidence, and the M3 sweep (semantically clustered
+table is ContainsTokenSequence evidence, and the raw-text overlap sweep (semantically clustered
 patterns, a no-literal length shape, a common-literal shape, a CTS-equivalent
-differential control, a Not(Regex) shape; recording overlap, under-fill rate and
-fallback-kNN latency per pattern) is a LAUNCH GATE for this design.**
+differential control, a Not(Regex) shape, and a `Not(Regex)` probe against the
+533 empty-`theory` and ~6,800 empty-`expr` rows — does negation return them?;
+recording overlap, under-fill rate and fallback-kNN latency per pattern) is a
+LAUNCH GATE for this design.**
 
 **Determinism** holds for the route and for kNN (functions of the data); for ANN
 it holds per index state, not per release.
@@ -2611,7 +2669,9 @@ selection; above-line within budget. The overlap half (≥ 195/200 against the
 below-line run) lives in `worker/probe/live_probe.mjs`, which holds the read key
 and issues both rank modes — no mid-acceptance redeploys, ever. The probe's
 current check 3 asserts the disproved fullness⇒completeness inference and is
-rewritten to the certificate. Both branches' rows carry `$dist` (asserted; D40's
+rewritten to the certificate. The probe further asserts `/about` displays
+exactly the configured `ENTITIES`/`BUILT`, and that `ROWS` is within 1 % of
+the namespace's `approx_row_count`. Both branches' rows carry `$dist` (asserted; D40's
 similarity column is computed from it).
 
 **Implementation notes an implementer must not guess**: the two knobs (line
@@ -2620,7 +2680,9 @@ fraction, deadlines) live in `wrangler.toml [vars]`; the count arrives at
 match — do not "optimise" it); the `exact` tag assumes a single vector leg over
 an immutable namespace (reviving §6.6's dormant BM25 leg or moving to
 incremental updates invalidates it); log per search: route, certificate outcome,
-both performance blocks, any retry or fallback. Retired, recorded against
+both performance blocks, any retry or fallback. Cost: two to three turbopuffer
+queries per search against per-query minimums (≈ $0.0000013 each) — §11.1b's
+one-query-per-search model is superseded in kind, still noise in amount (D28). Retired, recorded against
 re-proposal: the two-knob latency-budget router and the bundled count+ANN round
 (superseded by this protocol); the conjunction repair (§13 Q14 — kNN removed its
 correctness role, the raw-regex ruling removed the synthesized patterns);
@@ -2940,6 +3002,17 @@ be re-runnable and deterministic.
 
 ### 8.1 Steps
 
+**Amended 2026-08-26 (Q14 final ruling).** Step 5's tokenization and step 6's
+tokenizer-asset emission are replaced by: emit **`symbols.json`** (the 489-entry
+symbol-name→character table, extracted once from the retiring tokenizer asset)
+into the site's static assets, for the condition box's live `\<symbol>`
+replacement; write **no sentinel row and no `.asset` namespace**. Step 7's
+acceptance asserts `regex: true` on the three raw columns and one live `Regex`
+filter match, replacing the `ContainsTokenSequence` assertions. The export's
+final report prints three numbers — **row count, entity count, build date** —
+which RELEASE.md step 8 pastes into `wrangler.toml [vars]` (`ROWS`, `ENTITIES`,
+`BUILT`) beside `TPUF_NAMESPACE`, in the same commit.
+
 **Written, 2026-08-20: `site_export.py`** (then a package module reached as
 `isabelle-semantics site-export`; since the 2026-08-24 migration
 `src/site_export.py` of this repository, run as
@@ -3095,6 +3168,19 @@ start.
 
 ### 8.2 Versioning
 
+**The sentinel mechanism is deleted (user-ruled 2026-08-26).** The `.asset`
+companion namespace, the sentinel row, the digest and the Worker's startup
+assertion all retire: the digest guarded tokenizer-rule mismatch, a failure
+class that died with tokenization, and the sentinel's display numbers cost a
+cross-ocean turbopuffer read on every cold-isolate page view ("绝对不能这样写
+代码"). `ENTITIES`/`BUILT`/`ROWS` live in `wrangler.toml [vars]`, kept honest by
+the checklist: RELEASE step 6 prints them, step 8 pastes them in the same commit
+as `TPUF_NAMESPACE`, and step 10's probe asserts `/about` displays exactly the
+configured values and that `ROWS` is within 1 % of the namespace's
+`approx_row_count` (the approximate field is a tolerance CHECK, never the
+source). Page renders make zero upstream requests. The namespace-name
+versioning below stands.
+
 Write each export into a **new namespace**, and switch the Worker's target when it
 verifies. turbopuffer has no "delete everything absent from this batch"
 operation, so upserting into the live namespace would leave deleted entities
@@ -3231,6 +3317,18 @@ a newline or a space does. The `replace` above is therefore about what a card sh
 not about what matches.
 
 ## 9. The front end — phase two (D32)
+
+**2026-08-26 (Q14 final ruling) — three notes for this section.** §9.1's "no
+inline query syntax" means no panel/field-selector syntax (what D22 settled); a
+condition's text is now a regular expression, which is its entire content, not
+an inline syntax. §9.2's obligation ("never label this feature pattern") is
+**void** — conditions are patterns; the interface teaches only through the
+condition box's placeholder, hover, and the live validator's red outline with
+the engine's message (user-ruled; no §3.5 addition — "千万别写"). §9.3's third
+input route (live abbreviation replacement) is retired; the surviving routes
+are pasting Unicode and typing an Isabelle `\<symbol>` form, which the box
+replaces with its character as you type (table: the exported `symbols.json`;
+unknown names stay as typed, deliberately with no warning).
 
 This section records the design that was agreed, so that it does not have to be
 re-derived later. It was written under D20, which deferred the web application
@@ -3735,7 +3833,8 @@ been read as violating rather than as qualifying. The paragraphs below predate t
 keep their original wording as the record of D16 as first ruled.
 
 The site lives in this repository because the tokenizer has two
-implementations that must not drift (§5.5); one repository and one CI run is
+implementations that must not drift (2026-08-26: that reason retired with the
+tokenizer; the conclusion — one repository — stands on ordinary cohesion) (§5.5); one repository and one CI run is
 what enforces that, and version-number coordination across repositories would
 not.
 
@@ -3816,6 +3915,14 @@ allow-list** (`ROOT`, a few `.thy` files, `etc/`, `lib/`, `src/`, `Tools/`), so
 by `source: path: ../`, so `node_modules/` and similar must be git-ignored.
 
 ### 12.2 Order, and what actually blocks what
+
+**Amended 2026-08-26**: step 3 (freeze the tokenizer) is **void** — the
+tokenizer subsystem retires with Q14's final ruling; the digest gate, the test
+vectors and the ML twin are deleted in the re-export release. The ordering
+constraint that replaces it: **no condition of any kind functions until the
+re-export lands** (the live namespace's raw columns lack `regex: true`, and
+turbopuffer 400s a filter naming a non-regex column), so the re-export precedes
+or accompanies the router deploy.
 
 Steps 1-5 are phase one and 6 is phase two (D32). Within phase one the order is
 not a preference — three prerequisites feed the export, and none of them is
@@ -4399,14 +4506,22 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
     implementation-phase change (code deletions ride the re-export release, not
     this document).
   - **Abbreviation expansion retires from condition boxes** (user-ruled: "完全
-    放弃缩写"); `\<symbol>` ASCII forms are translated to their symbols before
-    sending (table-driven on known symbol names, deterministic), and NFC is
-    applied — "verbatim" means "verbatim after NFC and symbol-form translation".
+    放弃缩写"), and `\<symbol>` handling became an INPUT-METHOD feature (the
+    user's own design): the box replaces a completed `\<known-name>` with its
+    character live as you type, from the exported `symbols.json`; unknown names
+    stay as typed, deliberately with no warning (user-ruled). The Worker
+    applies NFC and nothing else — what the box shows IS the pattern.
+  - **The condition box** (all user-ruled): placeholder "a regular expression
+    (Rust regex syntax)"; live validation by a WASM Rust-regex build (red
+    outline + the engine's message inline; JavaScript's `RegExp` must never
+    validate); the newline-paste handler. §6.3c's "Input and validation" is the
+    spec.
   - **Unchanged**: the count router (§6.3c) — a regex condition routes by exact
-    match count like anything else; `excludes` compiles to `Not(Regex)` (probe
-    pending); the empty condition text is rejected before any request (D7); the
-    `on:'all'` combination stays rejected while the All panel is absent from
-    the interface; the M3 measurement (dense-regex overlap under ANN) is now a
+    match count like anything else; `excludes` compiles to `Not(Regex)`
+    (measured 2026-08-26: exact complement, nests under `And`/`Or`); the empty
+    condition text is rejected before any request (D7 — necessarily: an empty
+    pattern was measured to match every row); the `on:'all'` field value is
+    deleted from the API (user-ruled); the raw-text overlap sweep (dense-regex overlap under ANN) is now a
     LAUNCH GATE, since regex is the only condition form.
 
   **The dialect probe ran the same day, all green** (script:
@@ -4419,8 +4534,8 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   footgun: in `\<name>` a trailing bare `>` is a LITERAL `>` (only `\>` is the
   word-end assertion), so an untranslated `\<name>` silently matches nothing —
   harmless for known symbol names, which are translated before sending.
-  **What must still precede the release: the M3 overlap sweep re-run with
-  raw-text patterns — now a launch gate.**
+  **What must still precede the release: the raw-text overlap sweep — now a
+  launch gate.**
 
 ## 13b. Reader testing of the interface copy — done
 
@@ -4478,7 +4593,7 @@ every token boundary, to be matched with `Glob`. The adversarial review found
 it fatal: anchoring the query at both ends broke every partial-identifier
 query.
 
-**Partly superseded 2026-08-26 by Q14**, which proposes a glob column for *wildcard
+**Partly superseded 2026-08-26 by Q14** (and re-superseded the same day: the final ruling has no glob column and no wildcard — conditions are raw-text regular expressions), which proposes a glob column for *wildcard
 conditions only* rather than as the mechanism for all conditions. The fatal objection
 does not transfer: Q14's pattern is unanchored (leading and trailing `*`) while the
 boundary sentinels live in the stored value, so partial-identifier queries work —
