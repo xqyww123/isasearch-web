@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { Tokenizer } from '../../site/tokenizer/isabelle_tokenizer.js';
 import { KINDS, canonicalKinds, embeddingInput } from '../src/kinds.js';
 import { compileRequest, normalizeQuery, tupfQueryBody, rowsOf, collapse, entityOf,
-         matchedTheories, SearchError, RESULT_LIMIT } from '../src/search.js';
+         SearchError, RESULT_LIMIT } from '../src/search.js';
 
 const asset = JSON.parse(readFileSync(
   fileURLToPath(new URL('../../site/tokenizer/asset.json', import.meta.url)), 'utf8'));
@@ -137,18 +137,9 @@ test('§6.3: the compiled filter forms', () => {
   ]]);
 });
 
-test('D26 marking parts: Theory Name and All contains-conditions, nothing else', () => {
-  const { theoryParts } = compile({
-    query: 'q',
-    conditions: [
-      { on: 'theory', polarity: 'contains', text: 'HOL-Library' },
-      { on: 'all', polarity: 'contains', text: 'Multiset' },
-      { on: 'theory', polarity: 'excludes', text: 'Nominal' },
-      { on: 'expr', polarity: 'contains', text: 'sorted' },
-    ],
-  });
-  assert.deepEqual(theoryParts, [['HOL', '-', 'Library'], ['Multiset']]);
-});
+// `theoryParts` and D26's marking were deleted 2026-08-26: a record carries the
+// one theory it is written in, so a Theory Name condition that matches has
+// matched that, and there is no longer a set to pick the matching member out of.
 
 test('the tokenizer resolves ASCII escapes in a condition', () => {
   const { parts } = compile({
@@ -198,7 +189,7 @@ const KEY_LOCALE = b64([...Array(16).fill(1), 0x05, ...Buffer.from('List.sorted'
 // A row as turbopuffer returns it, score and all — collapse must strip these.
 const row = (over) => ({
   '$dist': 0.0328, vector: [0.1], expr_subtokens: ['e'],
-  id: 'u', key: KEY_THM, name: 'n', expr: 'e', theories: [], kind: 'lemma',
+  id: 'u', key: KEY_THM, name: 'n', expr: 'e', theory: 'HOL.List', kind: 'lemma',
   position: '', source_link: '', from_collection: '', interpretation: 'i',
   ...over,
 });
@@ -226,7 +217,7 @@ test('D5: rows of one entity become one card, kinds unioned, rank kept', () => {
   for (const card of cards) {
     assert.deepEqual(Object.keys(card).sort(), [
       'expr', 'from_collection', 'id', 'interpretation', 'key', 'kinds',
-      'name', 'position', 'similarity', 'source_link', 'theories']);
+      'name', 'position', 'similarity', 'source_link', 'theory']);
   }
 });
 
@@ -249,20 +240,15 @@ test('the card carries the cosine similarity, and null when the row has none', (
 test('collapse: an attribute the row lacks is the empty value, never a missing key', () => {
   const [card] = collapse([{ key: KEY_THM, kind: 'lemma' }]);
   assert.equal(card.expr, '');
-  assert.deepEqual(card.theories, []);
+  assert.equal(card.theory, '');
   assert.equal(card.source_link, '');
 });
 
-test('D26: theories matching an active Theory Name condition are marked', () => {
-  const cards = collapse([
-    row({ key: KEY_THM,
-          theories: ['HOL.List', 'HOL-Library.Multiset', 'Affine_Arithmetic.Foo'] }),
-  ]);
-  matchedTheories(cards, [tokenizer.run('HOL-Library')], tokenizer);
-  assert.deepEqual(cards[0].matched_theories, ['HOL-Library.Multiset']);
-
-  // No active condition: the field is absent, not empty.
-  const bare = collapse([row({ key: KEY_OTHER_PREFIX, theories: ['HOL.List'] })]);
-  matchedTheories(bare, [], tokenizer);
-  assert.ok(!('matched_theories' in bare[0]));
+test('the card carries the one theory the entity is written in', () => {
+  const [card] = collapse([row({ key: KEY_THM, theory: 'Query_Optimization.JoinTree' })]);
+  assert.equal(card.theory, 'Query_Optimization.JoinTree');
+  // Empty is the honest value for the records that have no defining theory; it
+  // is a string either way, never a missing key.
+  const [none] = collapse([row({ key: KEY_CONST, theory: '' })]);
+  assert.equal(none.theory, '');
 });

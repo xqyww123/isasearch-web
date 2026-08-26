@@ -8,7 +8,7 @@
 import { Tokenizer } from '../../site/tokenizer/isabelle_tokenizer.js';
 import assetText from '../../site/tokenizer/asset.json';
 import { embeddingInput } from './kinds.js';
-import { compileRequest, tupfQueryBody, rowsOf, collapse, matchedTheories,
+import { compileRequest, tupfQueryBody, rowsOf, collapse,
          RESULT_LIMIT, SearchError } from './search.js';
 import { embedQuery } from './embed.js';
 import { DailyGate } from './gate.js';
@@ -153,7 +153,7 @@ async function search(request, env, ctx) {
     }
     throw e;
   }
-  const { query, kinds, filters, theoryParts, parts } = compiled;
+  const { query, kinds, filters, parts } = compiled;
 
   let rows;
   try {
@@ -167,7 +167,6 @@ async function search(request, env, ctx) {
   }
 
   const cards = collapse(rows);
-  matchedTheories(cards, theoryParts, tokenizer);
 
   return json(200, {
     results: cards,
@@ -304,8 +303,8 @@ function secondsToUtcMidnight(now) {
 // ---------------------------------------------------------------------------
 
 const ENTITY_ATTRIBUTES = [
-  'key', 'name', 'expr', 'theories', 'kind', 'position', 'source_link',
-  'from_collection', 'interpretation',
+  'key', 'name', 'expr', 'theory', 'constituent_theories', 'kind', 'position',
+  'source_link', 'from_collection', 'interpretation',
 ];
 
 async function entity(request, url, env, ctx) {

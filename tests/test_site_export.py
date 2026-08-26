@@ -2,7 +2,7 @@
 be tested without the database, the Isabelle installation or the network.
 
 What is left to a run against the real store — the scope census, the completeness
-gate, the separator probe — is recorded in §8.1 beside each step.
+gate — is recorded in §8.1 beside each step.
 """
 import json
 import os
@@ -76,16 +76,10 @@ def test_the_document_id_is_a_uuid_and_deterministic():
     assert se.document_id(b"k") != se.document_id(b"l")
 
 
-def test_the_group_does_not_confuse_a_name_with_an_expression():
-    """Length-prefixed, so a name that ends where an expression begins cannot hash
-    like the pair with the boundary one character over."""
-    assert se.group_of("ab", "c") != se.group_of("a", "bc")
-
-
-def test_the_group_is_the_identity_of_a_name_and_an_expression():
-    """D5 as reversed: two records of different kinds sharing both collapse into one
-    card, which is only possible if they share a group."""
-    assert se.group_of("f", "x = y") == se.group_of("f", "x = y")
+# The two `group_of` cases and the three separator cases were deleted 2026-08-26
+# with the things they tested: the `group` column had had no reader since D5's
+# collapse moved to the universal key, and `theory_subtokens` now carries one
+# theory name, so there is no second name to separate it from.
 
 
 # --- §8.3 -------------------------------------------------------------------
@@ -94,27 +88,71 @@ def test_display_cleaning_normalises_line_endings():
     assert se.clean_for_display("a\r\nb\rc") == "a\nb\nc"
 
 
-# --- §6.3's separator -------------------------------------------------------
+# --- §6.3's one theory name -------------------------------------------------
 
-def test_a_separator_stands_between_theory_names_and_nowhere_else():
-    """Without it `[HOL.List, Affine_Arithmetic.Foo]` answers to the sequence
-    `List Affine_Arithmetic`, which is no theory's name."""
-    tokens = se.theory_subtokens(["HOL.List", "Affine_Arithmetic.Foo"],
-                                 lambda s: s.replace(".", " ").split())
-    assert tokens == ["HOL", "List", se.THEORY_SEPARATOR, "Affine_Arithmetic", "Foo"]
+def test_the_theory_subtokens_are_the_one_theorys():
+    assert se.theory_subtokens("HOL.List", lambda s: s.split(".")) == ["HOL", "List"]
 
 
-def test_one_theory_name_gets_no_separator():
-    assert se.theory_subtokens(["HOL.List"], lambda s: s.split(".")) == ["HOL", "List"]
+def test_no_defining_theory_gives_an_empty_token_list():
+    """Which is how the 533 records that have none match no Theory Name condition,
+    rather than matching a wrong one.  turbopuffer stores `[]` and never matches it
+    with `ContainsTokenSequence` (probed 2026-08-26)."""
+    assert se.theory_subtokens("", lambda s: s.split(".")) == []
 
 
-def test_the_separator_is_something_the_tokenizer_cannot_emit():
-    """The whole reason it is safe: no query can contain it, because §5.2 discards
-    whitespace before token formation."""
-    from Isabelle_Semantic_Embedding import isabelle_tokenizer
-    asset = json.load(open(se.committed_asset_path(), encoding="utf-8"))
-    tokenize = isabelle_tokenizer.Tokenizer(asset)
-    assert tokenize(se.THEORY_SEPARATOR) == []
+# --- §7's defining theory ---------------------------------------------------
+
+class _Rec:
+    def __init__(self, name, from_collection=""):
+        self.name, self.from_collection = name, from_collection
+
+
+_XOR_KEY = bytes(16) + b"\x02" + bytes(15)          # 32 bytes, tag byte = Theorem
+_NAME_KEY = b"\x11" * 16 + b"anything"              # not 32 bytes: name-addressed
+_BY_BASE = {"List": ["HOL.List"], "Foo": ["A.Foo", "B.Foo"]}
+
+
+def test_a_name_addressed_entity_keeps_isabelles_own_declaring_theory():
+    """Its position is NOT consulted: 1,236 records are declared in one theory and
+    positioned in another file, and there the registry is right."""
+    registry = {_NAME_KEY[:16]: "AutoCorres2.In_Out_Parameters_Ex"}
+    got = se.defining_theory_of(_NAME_KEY, _Rec("x.y"), [], {}, _BY_BASE, registry)
+    assert got == "AutoCorres2.In_Out_Parameters_Ex"
+
+
+def test_a_theorem_takes_the_theory_its_position_publishes_to():
+    positioned = {se.document_id(_XOR_KEY): "Query_Optimization.JoinTree"}
+    got = se.defining_theory_of(_XOR_KEY, _Rec("JoinTree.thm"), ["HOL.Set"],
+                                positioned, _BY_BASE, {})
+    assert got == "Query_Optimization.JoinTree"
+
+
+def test_a_collection_members_position_is_ignored_for_its_name():
+    """A member is minted where the collector ran, so its position points at the
+    collector's file; the collection's own name is the evidence."""
+    positioned = {se.document_id(_XOR_KEY): "Wrong.Collector_Theory"}
+    got = se.defining_theory_of(_XOR_KEY, _Rec("Deriv.x(3)", "Deriv.derivative_intros"),
+                                ["HOL.Deriv"], positioned, {"Deriv": ["HOL.Deriv"]}, {})
+    assert got == "HOL.Deriv"
+
+
+def test_the_fallback_prefers_the_records_own_dependencies():
+    """`Foo` names two published theories; the one this record already uses wins."""
+    got = se.defining_theory_of(_XOR_KEY, _Rec("Foo.thm"), ["B.Foo", "HOL.Set"],
+                                {}, _BY_BASE, {})
+    assert got == "B.Foo"
+
+
+def test_an_ambiguous_base_name_resolves_to_nothing_rather_than_a_guess():
+    got = se.defining_theory_of(_XOR_KEY, _Rec("Foo.thm"), ["HOL.Set"],
+                                {}, _BY_BASE, {})
+    assert got == ""
+
+
+def test_a_name_with_no_theory_prefix_resolves_to_nothing():
+    got = se.defining_theory_of(_XOR_KEY, _Rec("bare"), [], {}, _BY_BASE, {})
+    assert got == ""
 
 
 # --- §8.2's namespace name --------------------------------------------------
@@ -216,18 +254,18 @@ def _split(s):
 def test_a_document_carries_exactly_the_fields_the_schema_declares():
     """Two halves of one statement: a field in one and not the other is either an
     attribute turbopuffer types by guesswork or a column nothing ever fills."""
-    doc = se.build_document(b"k", _record(), ["HOL.List"], _vector(), _split, "")
+    doc = se.build_document(b"k", _record(), "HOL.List", [], _vector(), _split, "")
     assert set(doc) == set(se.namespace_schema(4))
 
 
 def test_the_position_is_a_symbolic_path_and_a_line():
-    doc = se.build_document(b"k", _record(), ["HOL.List"], _vector(), _split, "")
+    doc = se.build_document(b"k", _record(), "HOL.List", [], _vector(), _split, "")
     assert doc["position"] == "$AFP/Q/J.thy:42"
 
 
 def test_a_record_without_a_position_says_so_with_an_empty_string():
-    doc = se.build_document(b"k", _record(position=None), ["HOL.List"], _vector(),
-                            _split, "")
+    doc = se.build_document(b"k", _record(position=None), "HOL.List", [],
+                            _vector(), _split, "")
     assert doc["position"] == ""
 
 
@@ -236,10 +274,10 @@ def test_the_source_link_is_carried_verbatim():
     only carries the composed string; the empty string is D42's absent form.
     A document id the artefact does not name raises in `iter_documents`
     instead of shipping silently empty (the A3/B5 ruling)."""
-    doc = se.build_document(b"k", _record(), ["HOL.List"], _vector(), _split,
+    doc = se.build_document(b"k", _record(), "HOL.List", [], _vector(), _split,
                             "/source/HOL.List.html#L92")
     assert doc["source_link"] == "/source/HOL.List.html#L92"
-    doc = se.build_document(b"k", _record(), ["HOL.List"], _vector(), _split, "")
+    doc = se.build_document(b"k", _record(), "HOL.List", [], _vector(), _split, "")
     assert doc["source_link"] == ""
 
 
@@ -248,7 +286,7 @@ def test_a_collection_member_is_indexed_under_its_raw_name():
     filter for the whole namespace, so a pasted `coll(_)` matches nothing — which the
     user ruled intended on 2026-08-19."""
     doc = se.build_document(b"k", _record(name="Foo.bar_1", from_collection="Foo.bars"),
-                            ["HOL.List"], _vector(), _split, "")
+                            "HOL.List", [], _vector(), _split, "")
     assert doc["name_subtokens"] == _split("Foo.bar_1")
     assert doc["from_collection"] == "Foo.bars"
 
@@ -258,7 +296,7 @@ def test_the_vector_goes_up_as_little_endian_float32():
     schema's element type."""
     import base64
     import numpy as np
-    doc = se.build_document(b"k", _record(), ["HOL.List"],
+    doc = se.build_document(b"k", _record(), "HOL.List", [],
                             np.array([1.0, 2.0, 3.0, 4.0], dtype="float32"), _split, "")
     back = np.frombuffer(base64.b64decode(doc["vector"]), dtype="<f4")
     assert list(back) == [1.0, 2.0, 3.0, 4.0]

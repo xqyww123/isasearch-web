@@ -37,12 +37,10 @@
 
     <div class="panel-heading">Theory Name</div>
     <div class="conditions" data-panel="theory"></div>
-    <!-- §3.4, shown by app.js when it applies -->
-    <div id="theory-caveat-spacer" hidden></div>
-    <div class="theory-caveat" id="theory-caveat" hidden>
-      <p><strong>Theory Name conditions work differently on theorems.</strong> A Theory Name condition on a theorem matches every theory that declares a constant appearing in the theorem's statement. That is a different question from &ldquo;where was this theorem proved&rdquo;, although the two usually overlap: a theorem matches its own theory when its statement uses a constant from it, and matches many others besides. A theorem often has several such theories, and sometimes more than twenty.</p>
-      <p>To search for the theory that proves a theorem, use an <strong>Entity Name</strong> condition instead: an entity's name begins with the name of the theory that proves it, up to the first dot, so a condition of <code>Path_Connected</code> finds theorems proved in <code>Path_Connected</code>. Write the theory's own name without the session prefix. Such a condition also matches any entity whose name mentions <code>Path_Connected</code> anywhere else.</p>
-    </div>
+    <!-- §3.4's caveat stood here until 2026-08-26.  It explained that a Theory
+         Name condition matched a theorem's constituent theories rather than the
+         theory it was written in; the theory/constituent split ended that, and a
+         condition now means the same thing for every kind. -->
 
     <div class="panel-heading">Kind</div>
     <div class="kinds" id="kinds"></div>

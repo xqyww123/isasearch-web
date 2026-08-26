@@ -1,7 +1,7 @@
 // The search page.  State lives here; markup comes from render.js and the
 // fragments in index.html; every string is site/COPY.md's (section named).
-import { KINDS, KIND_LABEL, KIND_HOVER, THEOREM_ALIKE, COPY, thin, esc,
-         displayName, entityHref, kindBadge, kindColor, sourceLink, theoryLine,
+import { KINDS, KIND_LABEL, KIND_HOVER, COPY, thin, esc,
+         displayName, entityHref, kindBadge, kindColor, sourceLink,
          explanation, similarityText } from '/render.js';
 
 const PAGE = 20;
@@ -92,13 +92,8 @@ function refreshFilters() {
   if (n) parts.push(`${n} ${n === 1 ? 'condition' : 'conditions'}`);
   if (state.kinds.size) parts.push(`${state.kinds.size} of 11 kinds`);
   $('filters-summary').textContent = parts.join(' · ');
-  // §3.4: Theorem or a derived rule in play (an empty selection is every kind)
-  // AND a condition reaching Theory Name, directly or through All.
-  const thmAlike = state.kinds.size === 0 || [...state.kinds].some((k) => THEOREM_ALIKE.has(k));
-  const reaches = state.conditions.theory.some((c) => c.text.trim());
-  const show = thmAlike && reaches;
-  $('theory-caveat').hidden = !show;
-  $('theory-caveat-spacer').hidden = !show;
+  // §3.4's caveat, and the rule that decided when to show it, were deleted
+  // 2026-08-26: a Theory Name condition means one thing for every kind now.
 }
 
 function setFiltersOpen(open) {
@@ -262,7 +257,6 @@ function renderCard(card, index) {
         <div class="card-source">${sourceLink(card)}</div>
         <div class="card-score" title="Cosine similarity between your query and this entity">${esc(similarityText(card))}</div>
       </div>
-      ${theoryLine(card)}
       <div class="expr-wrap" data-clipped="${long && !exprOpen}"><pre class="expr">${esc(card.expr)}</pre></div>
       ${long ? `<button type="button" class="small-button expr-toggle">${esc(exprOpen ? COPY.collapseExpr : COPY.showAll(card.expr.length))}</button>` : ''}
       <button type="button" class="expl-toggle">${explOpen ? '&#9662; explanation &mdash; machine-generated' : '&#9656; explanation'}</button>

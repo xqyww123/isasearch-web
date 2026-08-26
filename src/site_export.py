@@ -124,11 +124,13 @@ def session_of(theory: str) -> str:
 # §8.1 steps 2 to 5 — one record becomes one document
 # ---------------------------------------------------------------------------
 
-# §6.3.  The tokenizer discards whitespace and can therefore never emit this, so no
-# query can contain it, and it is injected here rather than produced by the
-# tokenizer so subtoken formation never sees it.  The user chose it on 2026-08-09;
-# `check_theory_separator` is what tests that turbopuffer keeps it.
-THEORY_SEPARATOR = "\n"
+# `THEORY_SEPARATOR` stood here until 2026-08-26: a whitespace-only element the
+# tokenizer can never emit, injected between two theory names so a
+# `ContainsTokenSequence` could not match across them (`[HOL.List,
+# Affine_Arithmetic.Foo]` must not answer to `List Affine_Arithmetic`, which is
+# no theory's name).  `theory_subtokens` now carries ONE name, so there is
+# nothing to straddle and nothing to separate.  Its live probe,
+# `check_theory_separator`, went with it.
 
 
 def _hash128(*parts: bytes) -> bytes:
@@ -149,10 +151,13 @@ def document_id(key: bytes) -> str:
     return str(uuid.UUID(bytes=_hash128(key)))
 
 
-def group_of(name: str, expr: str) -> str:
-    """§6.1's `group`: the identity of the entity page (§9.4) and the key the
-    response collapses on (D5).  One `(name, entity expression)` pair, one group."""
-    return _hash128(name.encode("utf-8"), expr.encode("utf-8")).hex()
+# `group_of` stood here until 2026-08-26, filling a filterable `group` column with
+# the hash of one `(name, expression)` pair.  It was the entity page's identity and
+# D5's collapse key; D9 as amended made the page one-per-record and addressed it by
+# document id, and D5's collapse became the universal key with the tag byte masked
+# (`group` merged the same statement proved in two AFP entries and split the same
+# fact under two names).  Nothing had read the column since; it is gone, and with it
+# an index the namespace was carrying for no reader.
 
 
 def clean_for_display(expr: str) -> str:
@@ -165,17 +170,17 @@ def clean_for_display(expr: str) -> str:
     return expr.replace("\r\n", "\n").replace("\r", "\n")
 
 
-def theory_subtokens(theories: 'list[str]', tokenize) -> 'list[str]':
-    """§6.3.  The subtokens of every theory name, one separator element between
-    names, so a `ContainsTokenSequence` cannot match a sequence that straddles two of
-    them — `[HOL.List, Affine_Arithmetic.Foo]` must not answer to `List
-    Affine_Arithmetic`, which is no theory's name."""
-    out: 'list[str]' = []
-    for theory in theories:
-        if out:
-            out.append(THEORY_SEPARATOR)
-        out.extend(tokenize(theory))
-    return out
+def theory_subtokens(theory: str, tokenize) -> 'list[str]':
+    """§6.3, as of 2026-08-26: the subtokens of the ONE theory a Theory Name
+    condition matches — the theory the entity is written in.
+
+    Empty for the 533 records (0.04 %) with no defining theory, which is how they
+    stop matching every Theory Name condition rather than matching a wrong one.
+    turbopuffer accepts an empty `pre_tokenized_array` and treats it as this
+    intends: never matched by `ContainsTokenSequence`, still returned by its
+    negation, and read back as `[]` rather than as a missing key (probed against a
+    throwaway namespace, 2026-08-26)."""
+    return tokenize(theory) if theory else []
 
 
 # The one declaration of the patched column.  `run_patch` (site_source_pages)
@@ -195,13 +200,24 @@ def namespace_schema(dimension: int) -> dict:
                                           "remove_stopwords": False}}
     return {
         "id": "uuid",
-        "group": {"type": "string", "filterable": True},
         "vector": {"type": f"[{dimension}]f16", "ann": True},
         # display
         "key": {"type": "string", "filterable": False},
         "name": {"type": "string", "filterable": False},
         "expr": {"type": "string", "filterable": False},
-        "theories": {"type": "[]string", "filterable": False},
+        # The theory the entity is WRITTEN IN, one per record, empty when unknown.
+        # Scalar since 2026-08-26; `theories` was a list because a theorem carried
+        # its constituent theories here instead, which is the sense the split below
+        # moved to its own column.  Its shape now matches the other two filtered
+        # fields: `name`/`name_subtokens`, `expr`/`expr_subtokens`,
+        # `theory`/`theory_subtokens`.
+        "theory": {"type": "string", "filterable": False},
+        # Display only, and only a theorem-alike record has any: the theories
+        # declaring the constants its statement uses.  No full-text index — no
+        # condition reaches it (D14 as superseded), it is read only when an entity
+        # page renders.  Sorted, because turbopuffer preserves insertion order
+        # verbatim, so what is written here IS the order the chips appear in.
+        "constituent_theories": {"type": "[]string", "filterable": False},
         "kind": {"type": "string", "filterable": True},
         "position": {"type": "string", "filterable": False},
         "source_link": SOURCE_LINK_SCHEMA,
@@ -212,16 +228,17 @@ def namespace_schema(dimension: int) -> dict:
         "expr_subtokens": pre_tokenized,
         "name_subtokens": pre_tokenized,
         "theory_subtokens": pre_tokenized,
-        # ranking
-        "interpretation": {"type": "string",
-                           "full_text_search": {"case_sensitive": False,
-                                                "stemming": True,
-                                                "remove_stopwords": True}},
+        # Display only since 2026-08-26.  It carried a full-text index — case
+        # folded, stemmed, stopwords removed — for one reader: the BM25 leg of the
+        # hybrid ranking, dropped 2026-08-25 when the user measured the hybrid as
+        # worse than the vector leg alone.  The text still shows on every card and
+        # entity page; nothing searches it, so nothing indexes it.
+        "interpretation": {"type": "string", "filterable": False},
     }
 
 
-def build_document(key: bytes, rec, theories: 'list[str]', vector: np.ndarray,
-                   tokenize, source_link: str) -> dict:
+def build_document(key: bytes, rec, theory: str, constituents: 'list[str]',
+                   vector: np.ndarray, tokenize, source_link: str) -> dict:
     """§8.1 steps 2 to 5 for one record.
 
     `name_subtokens` comes from the raw `name` and never from the displayed form: a
@@ -229,6 +246,12 @@ def build_document(key: bytes, rec, theories: 'list[str]', vector: np.ndarray,
     the Worker emits one filter for the whole namespace and cannot route a member row
     to a different field, so a pasted `coll(_)` matches nothing — intended, and ruled
     on 2026-08-19 (§8.1 step 5).
+
+    `theory` is the one theory the entity is written in — `defining_theory_of`
+    below — and `constituents` the theories declaring the constants a statement
+    uses, display-only and empty for everything that is not theorem-alike.  Until
+    2026-08-26 one column carried both senses, which is what made a Theory Name
+    condition mean two things.
 
     `source_link` is the finished href the card will emit, composed from §17's
     artefact by `site_source_pages.source_links`; the empty string is D42's
@@ -238,20 +261,22 @@ def build_document(key: bytes, rec, theories: 'list[str]', vector: np.ndarray,
     expr = rec.expr or ""
     return {
         "id": document_id(key),
-        "group": group_of(name, expr),
         "vector": base64.b64encode(
             vector.astype("<f4", copy=False).tobytes()).decode("ascii"),
         "key": base64.urlsafe_b64encode(key).decode("ascii"),
         "name": name,
         "expr": clean_for_display(expr),
-        "theories": theories,
+        "theory": theory,
+        # Sorted here and nowhere else: turbopuffer stores an array in the order
+        # given, so this call is what fixes the order of the entity page's chips.
+        "constituent_theories": sorted(constituents),
         "kind": rec.kind.label,
         "position": (f"{rec.position[0]}:{rec.position[1]}" if rec.position else ""),
         "source_link": source_link,
         "from_collection": rec.from_collection or "",
         "expr_subtokens": tokenize(expr),
         "name_subtokens": tokenize(name),
-        "theory_subtokens": theory_subtokens(theories, tokenize),
+        "theory_subtokens": theory_subtokens(theory, tokenize),
         "interpretation": rec.interpretation or "",
     }
 
@@ -276,8 +301,14 @@ def theory_registry() -> 'dict[bytes, str]':
 
 
 def theories_of(key: bytes, rec, registry: 'dict[bytes, str]') -> 'list[str]':
-    """D14: the constituent theories of a theorem-alike entity, the declaring theory
-    of a name-addressed one.
+    """Every theory a record depends on: the constituent theories of a
+    theorem-alike entity, the declaring theory of a name-addressed one.
+
+    This is no longer what a Theory Name condition matches — `defining_theory_of`
+    is — but it remains **D24's scope test**, and deliberately: the scope question
+    is "does everything this record needs come from a declared session", which the
+    dependency set answers and one theory cannot.  It is also what the entity page
+    shows a theorem under its constituent-theories heading.
 
     A theorem-alike key's 16-byte prefix is an XOR pseudo-theory and must never be
     looked up as a real theory (D13), which is why the two cases are told apart by
@@ -295,6 +326,69 @@ def theories_of(key: bytes, rec, registry: 'dict[bytes, str]') -> 'list[str]':
             f"the declaring theory of {rec.name!r} (hash {key[:16].hex()}) is not in "
             f"the theory-hash registry, so D24's scope test cannot be applied to it")
     return [name]
+
+
+def _head_theory_name(rec) -> str:
+    """The theory base name a record's own name begins with, or `''`.
+
+    An Isabelle entity is named `<theory base name>.<rest>`.  For a member of a
+    dynamic fact collection the member's own name is minted where the collector
+    ran, so the collection's name is read instead — `Deriv.derivative_eq_intros(93)`
+    belongs to `Deriv`, not to the theory that happened to gather it."""
+    source = rec.from_collection or rec.name or ""
+    return source.split(".", 1)[0] if "." in source else ""
+
+
+def defining_theory_of(key: bytes, rec, dependencies: 'list[str]',
+                       positioned: 'dict[str, str]',
+                       by_base: 'dict[str, list[str]]',
+                       registry: 'dict[bytes, str]') -> str:
+    """**The one theory the entity is written in**, or `''` when nothing says.
+
+    This is what a Theory Name condition matches as of 2026-08-26, for every kind
+    alike.  Two sources, in order:
+
+    1. **Isabelle's own record**, for a name-addressed entity: the key's first 16
+       bytes ARE its declaring theory's hash, so `theories_of` already has it and
+       it is authoritative.  The entity's source position is NOT consulted, and
+       must not be — 1,236 name-addressed records are declared in one theory and
+       positioned in another file (`AutoCorres2.CLocals` mints entities for eleven
+       theories from inside its own file), and there Isabelle is right.
+
+    2. **The source position**, for a theorem-alike entity, which Isabelle gives
+       no declaring theory at all (D13).  The file its statement was written in
+       publishes to exactly one theory page, and that page is named by the theory.
+       Measured over the corpus: resolves 98.40 %, and where a record's own name
+       also names a theory the two agree on 99.88 % — every disagreement being
+       `AutoCorres2.CLocals` again.
+
+    Then a fallback, for the theorem-alike records point 2 misses — no position
+    (1,831), a position inside an Isabelle/ML file (6,747), or a collection member
+    whose position points at the collector rather than at the fact (9,597).  Their
+    own name begins with a theory base name; resolve it against the record's own
+    dependencies first, since a name shared by several theories is most likely the
+    one this record already uses, and only then against the whole published tree.
+    An ambiguous base name resolves to nothing rather than to a guess.
+
+    Coverage of the whole rule, measured 2026-08-26: 99.95 % of theorem-alike
+    records, 100 % of name-addressed ones.  The 533 that resolve to `''` match no
+    Theory Name condition at all, which is the honest outcome — see
+    `theory_subtokens`."""
+    from Isabelle_RPC_Host.universal_key import is_xor_prefixed_key
+    if not is_xor_prefixed_key(key):
+        return registry[key[:16]]            # theories_of already raised if absent
+    if not rec.from_collection:
+        found = positioned.get(document_id(key))
+        if found is not None:
+            return found
+    head = _head_theory_name(rec)
+    if not head:
+        return ""
+    for candidates in (dependencies, by_base.get(head, [])):
+        hit = [t for t in candidates if t.rsplit(".", 1)[-1] == head]
+        if len(hit) == 1:
+            return hit[0]
+    return ""
 
 
 def vector_store_path(explicit: 'str | None' = None) -> str:
@@ -629,51 +723,12 @@ def request(method: str, path: str, body: 'dict | None' = None, *,
     raise AssertionError("unreachable")
 
 
-def check_theory_separator(*, region: str, key: str,
-                           namespace: str = "isasearch-separator-probe") -> None:
-    """§8.1 step 0b: does turbopuffer keep a whitespace-only element of a
-    `pre_tokenized_array`?
-
-    `theory_subtokens` puts one such element between two theory names so that a
-    `ContainsTokenSequence` cannot match across them (§6.3).  If the element is
-    dropped the straddle comes back, and the only symptom is a theory filter that
-    matches a name no theory has.  So the export asks, every time, against a
-    throwaway namespace: the negative query must find nothing and the positive one
-    must find the document, the second being there so that a query that is simply
-    broken cannot pass as a separator that works."""
-    schema = {"id": "uuid",
-              "vector": {"type": "[2]f32", "ann": True},
-              "theory_subtokens": namespace_schema(2)["theory_subtokens"]}
-    doc_id = str(uuid.UUID(bytes=_hash128(b"separator probe")))
-    request("POST", f"/v2/namespaces/{namespace}", {
-        "distance_metric": "cosine_distance",
-        "schema": schema,
-        "upsert_rows": [{"id": doc_id, "vector": [1.0, 0.0],
-                         "theory_subtokens": ["HOL", "List", THEORY_SEPARATOR,
-                                              "Affine_Arithmetic", "Foo"]}],
-    }, region=region, key=key)
-    try:
-        def matches(sequence):
-            got = request("POST", f"/v2/namespaces/{namespace}/query", {
-                "rank_by": ["id", "asc"], "top_k": 2,
-                "filters": ["theory_subtokens", "ContainsTokenSequence", sequence],
-            }, region=region, key=key)
-            return [row["id"] for row in got.get("rows", [])]
-
-        if matches(["HOL", "List"]) != [doc_id]:
-            raise ExportError(
-                "the separator probe's positive query matched nothing, so the probe "
-                "cannot say anything about the separator; fix the probe first")
-        straddle = matches(["List", "Affine_Arithmetic"])
-        if straddle:
-            raise ExportError(
-                f"turbopuffer dropped the whitespace-only separator element: a "
-                f"sequence straddling two theory names matched {straddle}. "
-                f"THEORY_SEPARATOR must become a non-whitespace character the "
-                f"tokenizer cannot emit — and replacing it replaces the user's own "
-                f"choice of 2026-08-09, so ask him (§6.3).")
-    finally:
-        request("DELETE", f"/v2/namespaces/{namespace}", region=region, key=key)
+# `check_theory_separator` stood here until 2026-08-26.  It asked turbopuffer,
+# against a throwaway namespace on every run, whether a whitespace-only element of
+# a `pre_tokenized_array` survives — the element `theory_subtokens` used to inject
+# between two theory names.  `theory_subtokens` carries one name now, so there is
+# no separator to keep and nothing to ask.  (The answer, for the record, was yes:
+# it survived every run this export ever made.)
 
 
 # ---------------------------------------------------------------------------
@@ -739,7 +794,9 @@ def iter_shippable(sessions, registry, counts) -> 'Iterator[tuple[bytes, object,
 
 
 def iter_documents(sessions, registry, get_vector, tokenize, counts,
-                   source_links: 'dict[str, str] | None') -> 'Iterator[tuple[bytes, dict]]':
+                   source_links: 'dict[str, str] | None',
+                   positioned: 'dict[str, str]',
+                   by_base: 'dict[str, list[str]]') -> 'Iterator[tuple[bytes, dict]]':
     """§8.1 steps 0 and 2 to 5, one record at a time, in key order.
 
     `source_links` is the composed link per document id, or None when the
@@ -747,8 +804,13 @@ def iter_documents(sessions, registry, get_vector, tokenize, counts,
     With an artefact present, a document id it does not name is an error, not
     an empty link: the artefact's records cover every published id, so absence
     means the store moved since the scan — a stale artefact must not ship as
-    silently-absent links (the A3/B5 ruling, 2026-08-23)."""
-    for key, rec, theories in iter_shippable(sessions, registry, counts):
+    silently-absent links (the A3/B5 ruling, 2026-08-23).
+
+    `positioned` and `by_base` come from the same artefact and feed
+    `defining_theory_of`; both are empty under `--no-source-links`, which then
+    leaves every theorem-alike record to the name fallback."""
+    from Isabelle_RPC_Host.universal_key import is_xor_prefixed_key
+    for key, rec, dependencies in iter_shippable(sessions, registry, counts):
         vector = get_vector(key)
         if vector is None:
             raise ExportError(f"{rec.name!r} lost its vector between the "
@@ -761,8 +823,16 @@ def iter_documents(sessions, registry, get_vector, tokenize, counts,
                 raise ExportError(
                     f"{rec.name!r} is not in the source-links artefact — the "
                     f"store moved since the scan; re-run scan and map (§17)")
+        theory = defining_theory_of(key, rec, dependencies, positioned, by_base,
+                                    registry)
         counts["exported"] += 1
-        yield key, build_document(key, rec, theories, vector, tokenize, link)
+        counts["no defining theory"] += 0 if theory else 1
+        # Only a theorem-alike record has constituents to show; for everything
+        # else `dependencies` is the single declaring theory, which `theory`
+        # already carries and the entity page says in a sentence instead.
+        constituents = dependencies if is_xor_prefixed_key(key) else []
+        yield key, build_document(key, rec, theory, constituents, vector,
+                                  tokenize, link)
 
 
 def _batches(documents, rows: int, size: int):
@@ -853,12 +923,22 @@ def run(*, isabelle_home: str, afp_dir: str, committed_asset: str,
         body, links_digest = ssp.load_artefact(source_links_path, "map",
                                                ssp.ARTEFACT_FORMAT)
         source_links = ssp.source_links(body)
+        # The same artefact answers "which theory is this written in" (§7 as
+        # rewritten 2026-08-26): both readings come off one (file, page) pair.
+        positioned = ssp.positioned_theories(body)
+        by_base: 'dict[str, list[str]]' = {}
+        for long_name in ssp.published_theories(body):
+            by_base.setdefault(long_name.rsplit(".", 1)[-1], []).append(long_name)
         _log(f"{len(source_links)} source link(s) composed from "
-             f"{source_links_path} ({links_digest[:12]})")
+             f"{source_links_path} ({links_digest[:12]}); "
+             f"{len(positioned)} position(s) name a theory, "
+             f"{sum(len(v) for v in by_base.values())} published theory name(s)")
     elif no_source_links:
         source_links, links_digest = None, None
+        positioned, by_base = {}, {}
         _log("--no-source-links: every source_link ships EMPTY — D42's absent "
-             "form on every card")
+             "form on every card — and every theorem-alike record falls back to "
+             "its own name for a defining theory")
     else:
         raise ExportError(
             "no --source-links artefact: an export without it would erase the "
@@ -870,9 +950,6 @@ def run(*, isabelle_home: str, afp_dir: str, committed_asset: str,
     _log(f"asset {digest[:12]} (tokenizer_rule {asset['tokenizer_rule']})")
 
     key = None if dump else api_key()
-    if key:
-        check_theory_separator(region=region, key=key)
-        _log("the theory separator survives a round trip (step 0b)")
 
     base = namespace_base(isabelle_home, afp_dir)
     # Against the override when there is one: that is the name this run will use, and
@@ -909,10 +986,11 @@ def run(*, isabelle_home: str, afp_dir: str, committed_asset: str,
 
         counts: 'dict[str, int]' = dict.fromkeys(
             ("records", "undecodable", "wip", "experience", "out of scope",
-             "exported"), 0)
+             "exported", "no defining theory"), 0)
         entities: 'set[bytes]' = set()
         documents = ((k, d) for k, d in iter_documents(
-            sessions, registry, get_vector, tokenize, counts, source_links)
+            sessions, registry, get_vector, tokenize, counts, source_links,
+            positioned, by_base)
             if entities.add(entity_of(k)) is None)
         if resume_after is not None:
             documents = ((k, d) for k, d in documents if k > resume_after)

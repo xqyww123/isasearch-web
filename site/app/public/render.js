@@ -30,8 +30,8 @@ const KIND_HUE = new Map([
 export const kindColor = (kind) => `oklch(0.55 0.10 ${KIND_HUE.get(kind) ?? 0})`;
 
 // COPY §1: a derived rule is one of the four; theorem-alike = Theorem or a
-// derived rule.  Such a record shows no theory line (D26) unless a condition
-// reached Theory Name.
+// derived rule.  Only such a record has constituent theories, so only its entity
+// page carries COPY §8's `Theories of the constants used` section.
 export const THEOREM_ALIKE = new Set([
   'lemma', 'introduction rule', 'elimination rule', 'induction rule', 'case-split rule']);
 
@@ -58,13 +58,6 @@ export const COPY = {
   noExplanation: 'No explanation was generated for this entity. Its name and its expression '
     + 'still place it in the results, but the search box works best against an '
     + 'explanation, so this entity is harder to reach by describing it.',
-  // §4.3
-  theoryLine: 'a constant in this statement comes from',
-  theoryHover: (n) => `Your condition matched this theory. It is one of the ${thin(n)} theories `
-    + 'that declare the constants in this statement. The theory where the theorem was '
-    + 'proved is usually in that set too, because a statement normally uses constants '
-    + 'from its own theory — but Isasearch does not mark which one it is, so a match '
-    + `here does not tell you where the theorem was proved. The entity page lists all ${thin(n)}.`,
   // §4.4
   sourceHover: 'The command that produced this entity. Many entities come from a command '
     + 'such as `datatype` or `fun` rather than from an explicit declaration, so the line '
@@ -72,11 +65,12 @@ export const COPY = {
   sourceAbsent: 'source position not recorded',
   sourceAbsentHover: 'Some commands do not report a position, so Isasearch cannot provide a link.',
   // §8
-  associatedTheories: 'Associated theories',
-  associatedTheoriesNote:
+  constituentTheories: 'Theories of the constants used',
+  constituentTheoriesNote:
     'These are the theories that declare the constants appearing in this statement.',
   source: 'Source',
   sourceNone: 'No source position was recorded for this entity. Some commands do not report one.',
+  definedIn: 'Defined in',
   nearest: 'Nearest entities',
   nearestNote: 'The ten entities closest to this one, compared with each other by the same '
     + 'measure that compares a query with an entity on the result cards.',
@@ -112,6 +106,7 @@ export const entityHref = (card) =>
 // instead would mean guessing the session from a directory path
 // (`~~/src/HOL/Probability/…` is session `HOL-Probability`, not `HOL.Probability`),
 // and a guessed name that does not exist is worse than none.
+//
 // Positions inside an Isabelle/ML file are published under this prefix (§17.2),
 // where the path is the symbolic file path with `$AFP`/`~~` spelled out as
 // directories — NOT a theory long name.  A theory long name can never collide
@@ -171,19 +166,25 @@ export function sourceLink(card, verbose = false) {
     : `<span class="source-absent" title="${esc(COPY.sourceAbsentHover)}">${esc(COPY.sourceAbsent)}</span>`;
 }
 
-// §4.3, narrowed 2026-08-25.  A name-addressed entity's one theory is no longer
-// printed here: the source line under the name now carries the same theory, with
-// its file and line.  What remains is D26's marking — the first theory a
-// contains-condition on Theory Name matched, which only theorem-alike cards can
-// have, and which is NOT where the theorem was proved (hence the hover).
-export function theoryLine(card) {
-  const thmAlike = card.kinds.every((k) => THEOREM_ALIKE.has(k));
-  if (!thmAlike) return '';
-  const matched = card.matched_theories?.[0];
-  if (!matched) return '';
-  return `<div class="theory-line mono" title="${esc(COPY.theoryHover(card.theories.length))}">`
-    + `<span class="theory-lead">${esc(COPY.theoryLine)}</span> ${esc(matched)}</div>`;
-}
+/** COPY §8's second line of the Source block: the theory the entity is written
+ * in, always shown when there is one.  On about 98.5 % of pages it names the
+ * theory the line above already names — a theorem's defining theory is usually
+ * derived from that very position, so the two links then differ only by the
+ * fragment.  Shown anyway (approved 2026-08-26): an absent line would be
+ * ambiguous between "the same as above" and "not known", and the reader should
+ * not have to work out which.  Omitted, with no absent form, for the records
+ * that have no defining theory — the line above carries its own.
+ */
+export const definedIn = (card) => card.theory
+  ? `<div class="defined-in">${esc(COPY.definedIn)} `
+    + `<a class="mono" href="${esc(theoryHref(card.theory))}">${esc(card.theory)}</a></div>`
+  : '';
+
+// `theoryLine` stood here until 2026-08-26, printing D26's marking on a theorem
+// card: which of the seven-or-so theories declaring the statement's constants a
+// Theory Name condition had matched, under the lead "a constant in this statement
+// comes from".  A record has one theory now, so a condition that matches has
+// matched it, and the source line beneath the name already names it.
 
 export const explanation = (card) => card.interpretation
   ? `<div class="expl-text">${esc(card.interpretation)}</div>`

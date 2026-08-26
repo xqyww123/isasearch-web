@@ -193,6 +193,45 @@ def source_links(body: dict) -> 'dict[str, str]':
     return links
 
 
+def theory_of_page(page: str) -> 'str | None':
+    """The theory long name a published page carries, or None when the page is
+    not a theory's.  §17.2 names a theory page `/source/<long name>.html`, so
+    this is that rule read backwards; an `_aux/` page renders an Isabelle/ML
+    file, which is no theory's, and answers None."""
+    if not page.startswith(SITE_PREFIX) or page.startswith(f"{SITE_PREFIX}_aux/"):
+        return None
+    return page[len(SITE_PREFIX):-len(".html")]
+
+
+def positioned_theories(body: dict) -> 'dict[str, str]':
+    """Every record whose position lands in a `.thy` file, and the theory long
+    name of the page that file publishes to.
+
+    This is the primary evidence for a theorem-alike record's defining theory,
+    which Isabelle does not record: a theorem is content-addressed and its key
+    prefix is an XOR pseudo-theory (D13), but the file its statement was written
+    in publishes to exactly one theory page, and that page is named by the
+    theory.  Records with no position, with a position in the residue, or with
+    one inside an Isabelle/ML file are simply absent — the caller falls back.
+
+    Beside `source_links` on purpose: the link and the theory are two readings
+    of one `(file, page)` pair, so a row can never carry a link into one theory
+    and name another."""
+    fpm = body["file_page_map"]
+    theories = [theory_of_page(fpm[f]) if f in fpm else None for f in body["files"]]
+    return {doc_id: theories[fi]
+            for doc_id, fi, _line in body["records"]
+            if fi >= 0 and theories[fi] is not None}
+
+
+def published_theories(body: dict) -> 'set[str]':
+    """Every theory long name the published tree serves a page for.  The
+    fallback resolves a bare base name against this set (see `site_export`), so
+    it must be the published universe and not the corpus's."""
+    return {t for t in (theory_of_page(p) for p in body["file_page_map"].values())
+            if t is not None}
+
+
 def needed_lines_by_page(body: dict) -> 'dict[str, list[int]]':
     """The marks each published page needs, derived from the same triples the
     links compose from (Q4) — the injected marks and the lines the links point

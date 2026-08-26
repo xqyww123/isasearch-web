@@ -76,9 +76,6 @@ code { font-size: 0.95em; }
 .remove:hover { border-color: #8a877f; color: #1b1b19; }
 .add-condition { background: transparent; border: 1px dashed #cfcbc2; padding: 4px 10px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5f5d57; cursor: pointer; }
 .add-condition:hover { border-color: #8a877f; color: #1b1b19; }
-.theory-caveat { max-width: 600px; margin-top: -4px; padding: 6px 10px; background: oklch(0.97 0.035 85); border: 1px solid oklch(0.86 0.07 85); border-left-width: 3px; font-size: 11.5px; line-height: 1.5; color: oklch(0.42 0.09 70); text-wrap: pretty; }
-.theory-caveat p { margin: 0; }
-.theory-caveat p + p { margin-top: 6px; }
 .kinds { display: flex; flex-wrap: wrap; gap: 6px; max-width: 900px; }
 .kind-button { display: inline-flex; align-items: center; gap: 6px; background: #ffffff; border: 1px solid #d9d6cf; color: #5f5d57; padding: 4px 10px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; cursor: pointer; }
 .kind-button:hover { border-color: #8a877f; color: #1b1b19; }
@@ -102,8 +99,6 @@ code { font-size: 0.95em; }
 .card-kinds { display: flex; flex-wrap: wrap; gap: 10px; }
 .kind { display: inline-flex; align-items: center; gap: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #5f5d57; }
 .kind-big { font-size: 10.5px; gap: 6px; }
-.theory-line { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; color: #75736c; }
-.theory-lead { color: #8a877f; font-family: 'IBM Plex Sans', system-ui, sans-serif; }
 .expr-wrap { position: relative; }
 /* Same row as the name, pushed to the far right, sitting on its baseline. */
 .card-source { margin-left: auto; text-align: right; font-size: 11.5px; overflow-wrap: anywhere; }
@@ -192,6 +187,8 @@ code { font-size: 0.95em; }
 .section-note { font-size: 12px; line-height: 1.6; color: #75736c; }
 .theory-chips { display: flex; flex-wrap: wrap; gap: 6px 8px; }
 .theory-chip { font-family: 'PhiSymbols', monospace; font-size: 12px; border: 1px solid #e0ddd6; background: #ffffff; padding: 3px 9px; color: #45443f; }
+.defined-in { margin-top: 4px; }
+.defined-in a { color: inherit; }
 .source-box { border: 1px solid #e5e3de; background: #ffffff; padding: 12px 14px; font-size: 13px; color: #45443f; line-height: 1.6; }
 .entity-aside { border-left: 1px solid #e5e3de; padding: 30px 26px 60px; display: flex; flex-direction: column; gap: 12px; align-self: stretch; background: #f7f6f3; min-height: 100%; }
 .nearest { display: flex; flex-direction: column; }

@@ -25,7 +25,7 @@ const POLARITIES = ['contains', 'excludes'];
 
 // What a result card needs and nothing else: no vector, no subtoken arrays.
 const INCLUDE_ATTRIBUTES = [
-  'key', 'name', 'expr', 'theories', 'kind', 'position',
+  'key', 'name', 'expr', 'theory', 'kind', 'position',
   'source_link', 'from_collection', 'interpretation',
 ];
 
@@ -49,13 +49,10 @@ export function normalizeQuery(s) {
 
 /** Validate the request body and compile §6.3's filter tree.
  *
- * Returns { query, kinds, filters, parts, theoryParts }:
+ * Returns { query, kinds, filters, parts }:
  *   filters      the tree attached to every leg (null when nothing filters)
  *   parts        each condition's surviving subtokens, in request order — the
  *                §5.1 empty state prints them
- *   theoryParts  the subtoken lists of the conditions that reach the Theory
- *                Name field with `contains` — directly or through All (COPY
- *                §4.3) — which D26's marking consumes
  */
 export function compileRequest(body, tokenizer) {
   if (typeof body !== 'object' || body === null) throw new SearchError('bad_request');
@@ -78,7 +75,6 @@ export function compileRequest(body, tokenizer) {
 
   const clauses = [];
   const parts = [];
-  const theoryParts = [];
   conditions.forEach((c, index) => {
     if (typeof c !== 'object' || c === null || typeof c.text !== 'string'
         || !POLARITIES.includes(c.polarity) || !PANELS.includes(c.on)) {
@@ -101,9 +97,6 @@ export function compileRequest(body, tokenizer) {
           (f) => [FIELD_OF[f], 'ContainsTokenSequence', sub])]
       : [FIELD_OF[c.on], 'ContainsTokenSequence', sub];
     clauses.push(c.polarity === 'contains' ? contains : ['Not', contains]);
-    if (c.polarity === 'contains' && (c.on === 'theory' || c.on === 'all')) {
-      theoryParts.push(sub);
-    }
   });
 
   // D29 as amended: an empty kind selection sends no kind condition at all;
@@ -114,7 +107,7 @@ export function compileRequest(body, tokenizer) {
     clauses.length === 0 ? null
     : clauses.length === 1 ? clauses[0]
     : ['And', clauses];
-  return { query, kinds, filters, parts, theoryParts };
+  return { query, kinds, filters, parts };
 }
 
 
@@ -192,7 +185,7 @@ export function collapse(rows) {
       from_collection: row.from_collection ?? '',
       kinds: [row.kind],
       expr: row.expr ?? '',
-      theories: row.theories ?? [],
+      theory: row.theory ?? '',
       position: row.position ?? '',
       source_link: row.source_link ?? '',   // '' is D42's absent form
       interpretation: row.interpretation ?? '',
@@ -208,36 +201,9 @@ export function collapse(rows) {
   return cards;
 }
 
-/** Is `needle` a contiguous run inside `hay`?  Exactly ContainsTokenSequence's
- * reading, used below to mark which theories matched. */
-function containsSequence(hay, needle) {
-  outer:
-  for (let i = 0; i + needle.length <= hay.length; i += 1) {
-    for (let j = 0; j < needle.length; j += 1) {
-      if (hay[i + j] !== needle[j]) continue outer;
-    }
-    return true;
-  }
-  return false;
-}
-
-/** D26: when a contains-condition reaches the Theory Name field, a theorem
- * card shows the theories that matched it.  This marks them: for each card,
- * the theory long names whose own subtokens contain some such condition's
- * sequence.  With no such condition the field is absent from the response.
- */
-export function matchedTheories(cards, theoryParts, tokenizer) {
-  if (theoryParts.length === 0) return;
-  const cache = new Map();
-  const subtokensOf = (theory) => {
-    let sub = cache.get(theory);
-    if (!sub) cache.set(theory, sub = tokenizer.run(theory));
-    return sub;
-  };
-  for (const card of cards) {
-    card.matched_theories = card.theories.filter((theory) => {
-      const sub = subtokensOf(theory);
-      return theoryParts.some((p) => containsSequence(sub, p));
-    });
-  }
-}
+// D26's marking stood here until 2026-08-26, with `containsSequence` beneath it:
+// when a contains-condition reached the Theory Name field, a theorem card marked
+// which of its theories had matched, because a theorem carried around seven of
+// them and the reader could not otherwise tell which one the condition had found.
+// A record has one theory now — the one it is written in — so a Theory Name
+// condition that matches has matched that, and there is nothing to pick out.

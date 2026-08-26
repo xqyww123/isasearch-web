@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { sourceText, theoryHref } from '../../site/app/public/render.js';
+import { sourceText, theoryHref, definedIn } from '../../site/app/public/render.js';
 
 // ---- the source link's text (COPY §4.4) -----------------------------------
 
@@ -74,4 +74,28 @@ test('every character published theory names use survives untouched', () => {
   // else (counted 2026-08-26); each is a literal in a URL path segment.
   const name = 'CoreC++.Zeta-9_x.Y';
   assert.equal(theoryHref(name), `/source/${name}.html`);
+});
+
+// ---- COPY §8's `Defined in` line ------------------------------------------
+
+test('the Defined in line names the theory and links to it unescaped', () => {
+  const got = definedIn({ theory: 'CoreC++.Decl' });
+  assert.match(got, /Defined in/);
+  assert.match(got, /href="\/source\/CoreC\+\+\.Decl\.html"/);
+  assert.match(got, />CoreC\+\+\.Decl</);
+});
+
+test('a record with no defining theory gets no line at all, not an absent form', () => {
+  // The 533 that resolve to nothing.  The Source line above carries its own
+  // absent form; a second "not known" beneath it would say nothing new.
+  assert.equal(definedIn({ theory: '' }), '');
+  assert.equal(definedIn({}), '');
+});
+
+test('the line is shown even when it repeats the theory the source line names', () => {
+  // True of about 98.5 % of records, and deliberate (approved 2026-08-26): an
+  // absent line would be ambiguous between "same as above" and "not known".
+  const card = { theory: 'HOL-Computational_Algebra.Primes',
+                 source_link: '/source/HOL-Computational_Algebra.Primes.html#L525' };
+  assert.notEqual(definedIn(card), '');
 });

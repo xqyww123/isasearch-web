@@ -219,38 +219,33 @@ Expression or Theory Name") is gone. The user's reading of it: "This condition"
 had no visible antecedent, and the sentence never said whether the text had to
 appear in one of the three or in all three.
 
-### 3.4 The note under Theory Name
+### 3.4 The note under Theory Name — deleted 2026-08-26
 
-**The trigger is the user's, settled 2026-08-19**: the note appears when the Kind
-selection includes Theorem or a derived rule **and** the Theory Name panel carries a
-condition — not merely when the panel is open. (Until the All panel was deleted
-on 2026-08-25 an All condition triggered it too, for the same reason.) An empty
-kind selection restricts nothing (§3.6), so it counts as
-including Theorem: the note appears under the default selection too (ruled
-2026-08-25). A note that is always on screen is a note nobody reads; this one
-appears exactly when it applies.
+**There is no note.** The whole section is gone, and so is the trigger that
+decided when to show it.
 
-> **Theory Name conditions work differently on theorems.** A Theory Name condition
-> on a theorem matches every theory that declares a constant appearing in the
-> theorem's statement. That is a different question from "where was this theorem
-> proved", although the two usually overlap: a theorem matches its own theory when
-> its statement uses a constant from it, and matches many others besides. A theorem
-> often has several such theories, and sometimes more than twenty.
->
-> To search for the theory that proves a theorem, use an **Entity Name** condition
-> instead: an entity's name begins with the name of the theory that proves it, up to
-> the first dot, so a condition of `Path_Connected` finds theorems proved in
-> `Path_Connected`. Write the theory's own name without the session prefix. Such a
-> condition also matches any entity whose name mentions `Path_Connected` anywhere
-> else.
+It existed to explain that a Theory Name condition meant one thing on a theorem
+and another on everything else: for a theorem it matched every theory declaring
+a constant that the statement used — around seven of them, sometimes more than
+twenty — and not the theory the theorem was written in. That is what D15
+required to be "stated plainly in the interface", and four drafts went into
+stating it (the rejected ones are in §12).
 
-*(Draft 1 said "Isasearch does not record which theory declares a theorem", which
-is false about Isabelle and contradicts the source link on the same card. Draft 2
-replaced it with "A theorem is identified by its statement, not by the place
-where it is written", which the Isabelle reader rejected for the same reason —
-that is true of this index, not of Isabelle, and it was doing the work of
-justifying a design choice that can simply be stated. Draft 3 states only the
-behaviour. §12.)*
+The plan's `theory` / `constituent_theories` split removed the thing being
+explained. A Theory Name condition now matches one theory for every kind of
+entity: **the theory the entity is written in**, which is what a reader typing
+a theory name is asking for. The foot line of §3.5 — the user's own "Theory
+Name: the defining theories of the entities" — is now true as written, with no
+footnote under it.
+
+Two further paragraphs went with the note. One taught a workaround: search the
+**Entity Name** panel for the theory's base name, because a theorem's name
+begins with the theory that proves it. The Theory Name panel does that job
+directly now, and correctly — the workaround also matched any entity merely
+mentioning the name, and failed on the 14.7 % of theorems whose name does not
+begin with their own theory. The other, on the result card, marked which of a
+theorem's theories a condition had matched (D26); with one theory there is
+nothing to pick out.
 
 ### 3.5 The foot of the panel group, always shown when expanded
 
@@ -747,10 +742,9 @@ shorter shared measure did not satisfy him either.
 **The copy control is kept here** (it is deleted from the result cards, §4.1).
 
 
-> **Associated theories**
+> **Theories of the constants used**
 
-For a constant, a type, a class, a locale, a proof method or named theorems, one
-theory. For a theorem or a derived rule, the complete list, untruncated (D26),
+**On a theorem or a derived rule only**, the complete list, untruncated (D26),
 under this line:
 
 > These are the theories that declare the constants appearing in this statement.
@@ -759,24 +753,64 @@ under this line:
 followed — the five-times-in-six figure, "Isasearch does not mark it either
 way", and where to find the proving theory in the entity name — are deleted.)*
 
+*(The heading was `Associated theories` until 2026-08-26, and the section also
+carried a constant's single declaring theory. Both were consequences of one
+field meaning two different things by kind; the plan's `theory` /
+`constituent_theories` split ended that, and the user chose this heading over
+the glossary's `Constituent theories` because it explains itself. The sentence
+under it is unchanged — it always described exactly these theories. **The
+section is absent, not empty, on everything that is not a theorem**, and it
+needs no rule to make it so: `constituent_theories` is empty for every
+name-addressed record, measured over all 199,155 of them. What a constant used
+to show here, the `Defined in` line below now says in a sentence.)*
+
 **Each theory is a link** to that theory's published source page (ruled
-2026-08-25). The address is the theory's own name: `HOL.Finite_Set` links to
-`/source/HOL.Finite_Set.html`. No mapping and no guessing is involved — the
-published tree names its files exactly as Isabelle names the theories; verified
-live against the distribution, the AFP and `Pure`.
+2026-08-25). The address is the theory's own name **verbatim**: `HOL.Finite_Set`
+links to `/source/HOL.Finite_Set.html`. No mapping, no guessing and **no
+percent-encoding** — the published tree names its files exactly as Isabelle
+names the theories, and the Worker looks the file up by the undecoded path, so
+an escaped name finds nothing. (Escaping was here until 2026-08-25 and 404ed
+all 29 `CoreC++.*` names, whose `+` became `%2B`.) Verified live against the
+distribution, the AFP and `Pure`.
 
 Then, when a source position is recorded:
 
 > **Source**
 > This entity was produced by the command at HOL-Computational_Algebra.Primes.thy:525.
+> Defined in HOL-Computational_Algebra.Primes
 
-(The link text is the theory's full name with the line, as on the card — §4.4.)
+(The first line's link text is the theory's full name with the line, as on the
+card — §4.4.)
 
 and when none is recorded:
 
 > **Source**
 > No source position was recorded for this entity. Some commands do not report
 > one.
+> Defined in Abstract_Reachability_Analysis.Approximation_Bounds
+
+**The `Defined in` line names the theory the entity is written in**, and the
+theory is a link, addressed exactly as the chips above are. Approved
+2026-08-26, in the user's own words. Three things were settled with it:
+
+- **It is always shown**, not only when it says something the line above does
+  not. On about 98.5 % of pages it names the theory that line already names,
+  because a theorem's defining theory is usually derived from that very
+  position — the two links then differ only by the line fragment. Shown
+  always anyway: the alternative makes an absent line ambiguous between "same
+  as above" and "not known", and a reader should not have to infer which.
+  It carries real information on the remaining 1.5 % — 19,630 records whose
+  position falls in an Isabelle/ML file, or in the file where a dynamic fact
+  collection was seen rather than where the fact was written, or nowhere at
+  all, in which case this line is the only place the theory appears.
+- **`Defined in` for every kind**, though a theorem is proved rather than
+  defined. `Proved in` for theorems and `Defined in` for the rest was
+  considered and rejected: one concept keeps one word across the site, and the
+  word is the user's own from the filters panel, "Theory Name: the defining
+  theories of the entities".
+- **The line is omitted entirely** for the 533 records (0.04 %) whose defining
+  theory could not be determined. No absent form: the Source line above already
+  carries its own, and a second "not known" beneath it would say nothing new.
 
 Then:
 
