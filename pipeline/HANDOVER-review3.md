@@ -1134,3 +1134,69 @@ attribution is the client validator's job and the server 4xx renders page-level
 via §5.8. NEXT: implementation can start on the user's word — router first
 (§6.3c is the spec), then the re-export release (regex:true, drop *_subtokens,
 symbols.json, no sentinel), with the raw-text overlap sweep as its launch gate.
+
+## STATE AT COMPACT #8 (2026-08-26, night) — IMPLEMENTATION STARTS NOW
+
+**The user has given the go-ahead: implementation begins immediately after this
+compact.** Order: ① the count router in the Worker, ② the front end, ③ the
+re-export release, ④ a full RELEASE.md run. Everything below is pointers; the
+specs themselves are all in the repo, committed and pushed (HEAD e8ddbfa).
+
+**Specs (authoritative, complete):**
+- Router: plan §6.3c — protocol, the deadline/retry table (4/8/12/15 s;
+  timeout-retry only on ≤8 s legs; one retry per search; no total budget,
+  ~35 s structural bound accepted), request/response contract
+  ({mode, count, rows, complete, results}; parts and limit_reached die),
+  one certificate everywhere, error codes (regex_rejected→COPY §5.8,
+  condition_empty, regex_timeout→COPY §6's new sentence, upstream),
+  "Input and validation" (WASM Rust-regex validator — NEVER JS RegExp; the
+  newline→\s+ paste handler; live \<symbol> replacement from symbols.json;
+  NFC-only on the Worker), acceptance items.
+- Condition design: plan §13 Q14 "THE FINAL RULING" — regex over raw
+  name/expr/theory text; no tokenization anywhere; on:'all' deleted from the
+  API; excludes = Not(Regex) (measured exact); empty text rejected pre-request
+  (empty pattern matches every row, measured).
+- Export changes: §8.1/§8.2 banners — regex:true on the three raw columns,
+  *_subtokens dropped, symbols.json (489 names, extract from
+  site/tokenizer/asset.json BEFORE deleting the tokenizer) as a static asset,
+  NO sentinel row / NO .asset namespace; the export's final report prints
+  rows/entities/built for RELEASE step 8 to paste into wrangler [vars]
+  (ROWS/ENTITIES/BUILT beside TPUF_NAMESPACE, same commit); step 10 probe
+  asserts /about == config and ROWS within 1 % of approx_row_count.
+- COPY: regex-era strings all written (§0, §3.2 incl. placeholder
+  "a regular expression (Rust regex syntax)" and the input-method paragraph,
+  §4.5 trigger=complete, §5.1/§5.3 incl. excludes variants, §5.6, §5.8,
+  §6 regex_timeout). Header names them as shipping with the re-export.
+
+**Worker code-change list (from the reviews; condensed):** tupfQueryBody takes
+a rank mode (kNN spelling: rank_by ["vector","kNN",v]); a count body builder +
+accessor for results[0].aggregations.n (keep rowsOf strict, do not reuse);
+tupfPost must carry resp.status and ≥2 KiB of body on the thrown error (today:
+generic Error, body sliced to 300 chars, all mapped to 502 upstream — that
+mapping must learn 4xx-no-retry); search() restructured to
+Promise.all([embed,count]) → route → certificate → fallback, with the per-
+search log line; index.js drops the tokenizer import, assertAssetMatches and
+the whole sentinel path (aboutFacts reads env vars); PANELS loses 'all';
+response fields swap (complete replaces limit_reached; parts gone) with
+app.js:207/231/235/282-350 updated together (empty states re-rendered per new
+COPY, excludes variants, per-condition red outline + engine message);
+replaceAbbrev/abbrevs.json retire; the \<symbol> live replacer + paste handler
++ WASM validator arrive (verify a sound rregex-WASM npm package exists; else
+validation is server-backstop-only for now and say so); worker/test pins ANN
+at search.test.mjs:160 (add kNN case); live_probe.mjs: checks 2/3 assert the
+disproved fullness inference (rewrite to the certificate), check 4 reads
+r.theories which D55 deleted (dead today), imports the retiring tokenizer.
+
+**Environment right now:** wrangler dev runs on 8787 (background, worker/
+directory, .dev.vars points at isasearch-preview-20260826 — fine for dev).
+Live worker is 6e38ad41 (pre-everything); live namespace
+isasearch-2025-2-afp-2026-05-13 untouched. Cleanup list unchanged (preview ns
+pair, published.pre-basefix, regexprobe scratch incl. 406 MB groundtruth.npz).
+
+**Launch gate before the re-export release:** the raw-text overlap sweep
+(spec inside §6.3c's "The 3 % line" paragraph: clustered patterns, no-literal
+length shape, common-literal, CTS-differential control, Not(Regex), the
+empty-value Not(Regex) probe; record overlap, under-fill rate, fallback-kNN
+latency; deadlines provisional until it runs). Scripts to adapt:
+~/isasearch-pipeline/regexprobe/ (probe.py in rawprobe/ shows the current
+request idioms).
