@@ -2374,7 +2374,10 @@ upserts in place instead of creating duplicates.
 ### 6.3 Query construction
 
 Under D21 there is one form for an expression condition, and `ContainsAllTokens`
-appears nowhere:
+appears nowhere (**amended 2026-08-26, user-ruled**: a second form now exists — a
+condition may instead be a raw regular expression the user writes, sent verbatim as a
+`Regex` filter over that field's `\n`-joined subtoken column; design and rulings in
+§13 Q14, "The design as it now stands". The token-sequence form below is unchanged):
 
 The two polarities are named `contains` and `excludes` throughout, matching the
 toggle the interface shows (D22); an earlier draft of this table wrote the first one
@@ -2399,9 +2402,14 @@ every document.** An `Or` across three fields costs about +17 to +20 ms per
 extra field, so no materialised concatenated field is needed.
 
 There is consequently **no routing rule, no mode selector, and no fallback
-query**. Draft 2 left all three undecided, and the "no exact match, showing
+query** ~~— Draft 2 left all three undecided~~, and the "no exact match, showing
 word matches" notice that `site/DESIGN_PROMPT.md` requires (its deliverable 5)
 exists only to explain a fallback that D21 deletes; that brief must lose it.
+**Amended 2026-08-26: one routing rule now exists — the count router of §6.3c**,
+introduced because the ANN rank mode silently loses filtered rows (§13 Q14,
+"The row loss, root-caused"). It routes between two rank modes over the *same*
+filter tree; it is not a second query form, not a mode the user selects, and
+not the fallback D21 deleted — the sentence above otherwise stands.
 
 An empty subtoken list must be rejected before it reaches turbopuffer: it would
 match everything (D7 also forbids the empty query outright). This is not a
@@ -2490,6 +2498,123 @@ the `["kind","In",[…]]` filter, and the rule that an empty selection sends no
 kind condition at all (D29 as amended). Ranking under the new instruction
 differs from ranking under the old one for any search that selected a kind, so
 a deployment of this change re-orders those results.
+
+### 6.3c The count router (2026-08-26, user-ruled; adversarially reviewed the same day)
+
+**What it is.** Every search whose compiled §6.3 filter tree is non-null first learns
+the tree's **exact match count**, then ranks in one of turbopuffer's two rank modes:
+the exhaustive **kNN rank mode** (exact; latency grows with the match count and the
+filter's evaluation cost) or the **ANN rank mode** used today (40–65 ms; approximate,
+and catastrophically lossy on sparse filters — §13 Q14, "The row loss, root-caused":
+`f x = x`, 142 true matches, 2 returned). "Non-null filter tree" is the predicate, not
+"carries a condition": a kind-only selection compiles to `["kind","In",…]` in the same
+tree and routes like everything else (COPY §1 defines a kind selection as not a
+condition, which is why the predicate must not use that word). A search with no filter
+at all is plain ANN, unchanged — the kNN rank mode requires a filter. The entity
+page's ten-nearest list is out of scope and makes no completeness claim.
+
+**The protocol (the user's own design, confirmed 2026-08-26).**
+
+1. The query embedding and a standalone count
+   (`aggregate_by {"n": ["Count","id"]}`, same filter tree, no vector) are requested
+   **concurrently**. The count is exact and cheap: 9–28 ms for single-token
+   conditions, up to ~300 ms for multi-token conditions of common tokens, 10–385 ms
+   for regex conditions (pattern-dependent).
+2. `count = 0` → the empty response, `mode: "exact"`; no ranked query is issued.
+   (Distinct from §6.3's rejection of an empty condition *text*, which never reaches
+   turbopuffer.)
+3. `count < 3 % of the namespace's row count` → one **kNN** query; the response is
+   exact. Assert `rows == min(count, 200)`; any shortfall is a vendor-contract
+   violation and an error, never served.
+4. Otherwise → one **ANN** query. If it returns a full 200 rows → serve, tagged
+   approximate. If it returns fewer → the result is **provably incomplete**
+   (`count ≥ 3 % ≫ 200`, so 200 were owed) → **fall back to one kNN query** and serve
+   its exact result. The fallback is the repair of a detected failure, not a routine
+   path.
+5. Every turbopuffer request carries a **4-second deadline**; on expiry or error it is
+   retried once (measured: the one recorded >300 s kNN hang ran at 542 ms on retry),
+   and a second failure returns the honest error — COPY §6's existing string, on every
+   failure path, with no degraded substitute. There are no stale rows to serve
+   degraded: each search issues at most one ANN and one kNN query, and a failed leg
+   leaves nothing behind.
+
+**The response contract.** The Worker's response carries
+`{mode: "exact" | "approximate", count, results}`, the mode set at the single point
+where rows are chosen: kNN rows (and the empty case) are `exact`; a full-200 ANN
+result is `approximate` — fullness is not exactness, because the row-count certificate
+is necessary and not sufficient (it proves nothing about 200 eligible-but-wrong rows).
+The count travels as data and is **never displayed** (D29's no-total stands; and it
+counts records while the interface counts D5-collapsed entities, two different
+numbers). Its one interface use — choosing between COPY §4.5's two existing
+end-of-list sentences by `count == rows` instead of the current heuristic, which today
+prints "These are all «2» entities that satisfy your conditions" against 142 true
+matches — is a COPY.md change awaiting the user's sign-off.
+
+**The 3 % line (user-ruled).** A fraction of the row count, so every release
+re-derives it by construction; today it is ~40,100 rows. Its measured basis (full
+tables in §13 Q14): every condition measured with a dirty full-200 overlap — down to
+102/200 — lies below it and therefore runs kNN; the 2.4–4.1 % window immediately above
+it measured 192–200/200 on every vector including the adversarial one. kNN cost below
+the line: typical conditions 86–554 ms, worst measured 1.5 s (`=`-heavy multi-token
+shapes, whose filter evaluation dominates — `top_k` does not bound kNN cost, which
+scores every match; do not "optimise" it by lowering `top_k`).
+
+**What "approximate" measures above the line.** ANN's full-200 overlap against the
+exact top 200: 169–200/200 across every shape tried (worst `( '` at 6.74 %;
+`) =` at 18.65 % → 188). **Negation is the shape density cannot protect** —
+`Not(=)` at 51 % of the corpus overlapped 155/200 when the query vector pointed at
+equations, exactly the adversarial geometry the review predicted — and the user ruled
+(2026-08-26) that these are **served and tagged approximate**, not forced through a
+5–6 s kNN and not refused; the under-fill fallback catches the rest, and the served
+rows all genuinely satisfy the filter (both branches are server-side filter-first;
+§6.6's prohibition on Worker post-filtering is untouched). This guarantee is a
+property of the current index build (a byte-identical rebuild moved a related loss
+figure from 41 to 74 rows), so it is re-established at every release — RELEASE.md
+step 10, not §16.6, which is the offline tokenizer digest gate and holds no
+credentials.
+
+**Determinism.** The route is a function of (namespace, filter tree) — a count, not a
+timing — and ANN/kNN results were measured deterministic per (vector, namespace):
+the same search gives the same answer on the same release, and the fallback fires
+deterministically, never as weather.
+
+**Failure matrix.** One rule: any leg errors or exceeds its deadline → one retry →
+honest error (COPY §6, zero new strings). Applied per leg: embedding; count (a search
+without a count has no route and no certificate — it is not guessed dense); kNN;
+ANN; the fallback kNN. The kNN row-count assertion above is also an error, logged
+loudly: the exact branch silently short would be the original defect wearing the
+repair's clothes.
+
+**Costs.** Wall clock: dense conditions ≈ max(embedding, count) + 50 ms — within
+~250 ms of today; sparse conditions ≈ max(embedding, count) + kNN (86 ms–1.5 s);
+fallback adds one kNN only on detected failure. Billing: two to three queries per
+search against per-query minimums of ≈ $0.0000013 — noise (D28).
+
+**Retired by this design** (recorded so nothing re-proposes them): the two-knob
+latency-budget variant of the router (superseded by the user's ANN-first-with-fallback
+rule, which needs no budget); the conjunction repair in full (§13 Q14 — kNN removed
+its correctness role, and the raw-regex ruling removed the synthesized patterns it
+would have optimised); and the round-1 bundled `multi_query` carrying a speculative
+ANN leg (the split deletes the discarded work, the degraded-fallback temptation, and
+an unmeasured intra-request-parallelism assumption). Rejected outright, with grounds,
+in §14: refusing above-the-line searches, and export-time count precomputation.
+
+**Implementation notes an implementer must not guess:** the two knobs (the 3 % line,
+the 4 s deadline) live in `wrangler.toml [vars]` so the acceptance test can move
+them; the count arrives under `results[0].aggregations.n` of a v2 query response;
+both rank modes return `$dist` and the acceptance probe asserts they are the same
+quantity (D40's similarity column is computed from it); log, per search: the route
+taken, the certificate outcome, both performance blocks, and any fallback or retry.
+
+**Launch acceptance (RELEASE.md step 10, via `/api/search` — a curl against
+turbopuffer exercises no line of the router).** (1) The condition `f x = x` returns
+every true match, asserted against an independent aggregate count over the whole
+tree *including a kind selection*, with the expected number stated after D5's
+collapse. (2) The branch boundary: one condition run with the line set just above
+and just below its count; the below-line run must be row-complete, the above-line
+run must return 200 within budget and overlap the below-line run ≥ 195/200 — this
+doubles as the per-build re-establishment of the approximate branch's guarantee.
+(3) Both runs' rows carry `$dist`.
 
 ### 6.4 Region
 
@@ -2581,7 +2706,17 @@ index does under a highly selective filter — whether it still returns the best
 *of the filtered set*, or degrades to a handful — is unevaluated. That is an
 acceptance criterion, not a curiosity: before launch, run a condition that matches a
 few hundred documents against the real 4,096-dimension index and confirm the response
-returns them rather than a fraction of them, and record the number. §16.8 carries it.
+returns them rather than a fraction of them, and record the number. ~~§16.8 carries
+it.~~ (A §16.8 bullet WAS later written and answered "yes, perfectly" for a
+narrow scalar `kind` filter — an earlier revision of this parenthetical denied
+its existence, which was false; that bullet's generalisation is struck in place.)
+**Measured 2026-08-26, and the fear was correct: it degrades to a handful.** On the
+live namespace the condition `f x = x` matches 142 documents and the ANN rank mode
+returned 2, 1, 6 and 0 of them across four query vectors. The full account is §13 Q14
+("The row loss, root-caused"); the fix — route by exact match count between the ANN
+rank mode and turbopuffer's exhaustive kNN rank mode — is §6.3c, and the launch
+acceptance check this paragraph asked for now reads: a conditioned query for
+`f x = x` returns all 142.
 
 **Each leg fetches 200; the fused list is truncated to 200.** Under D5 those
 200 rows collapse to ~182 distinct entities in the response, which is what
@@ -3849,9 +3984,19 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   old namespace deleted. Cost measured in cents (the $45 above was wrong).
   **Deferred by the user until after the front end ships.**
 
-- **Q14 (2026-08-26, the user's rulings recorded inline)** — **a standalone `_` in a
-  condition means a wildcard matching ONE OR MORE subtokens**, so `f _ x` matches
+- **Q14 (2026-08-26, the user's rulings recorded inline)** — ~~**a standalone `_` in a
+  condition means a wildcard matching ONE OR MORE subtokens**~~, so `f _ x` matches
   `f (a+b) x` and does not match `f x`. Rides Q13's re-export; not built.
+
+  **SUPERSEDED the same day, by the user's final ruling: the `_` wildcard is
+  replaced by letting the user write a raw regular expression.** His words:
+  "直接取代 _ 通配符。Isasearch 的用户全是高级用户" — the site's users are all
+  power users, so the friendly sugar is not worth a second pattern language.
+  What this supersedes and what it keeps is itemised in "The design as it now
+  stands" at the end of this entry; the paragraphs between here and there are
+  kept as the record of the superseded design and of the measurements — the
+  measurements all carry over, since the regex mode matches against exactly the
+  same `\n`-joined column the wildcard would have.
 
   **Mechanism.** Three new string columns — `name_glob`, `expr_glob`, `theory_glob` —
   each holding that field's subtokens joined with `\n`, **with a leading and a trailing
@@ -4063,10 +4208,14 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   filter scan is the expensive part) – 1.2 s (`x = y`, 14,880 matches) – 5–8 s for
   the degenerate bare `=` (655,804 matches, half the corpus). Billing is negligible:
   queries bill by data scanned with a 1.28 GB per-query minimum at $1/PB ≈
-  $0.0000013 per query. Design decisions this leaves to the user: whether every
+  $0.0000013 per query. ~~Design decisions this leaves to the user: whether every
   conditioned query simply uses kNN (recommended — unconditioned queries keep ANN,
   which kNN cannot serve anyway since it requires filters), and whether
-  near-degenerate conditions get a match-count bound for the latency tail.
+  near-degenerate conditions get a match-count bound for the latency tail.~~
+  **Ruled 2026-08-26**: the user judged the 5–8 s degenerate tail unacceptable and
+  approved routing by exact match count — Count first, then kNN at or below a
+  threshold, ANN above it. The design is §6.3c; the threshold value is still his
+  to pick.
   With kNN, the conjunction repair is no longer needed for correctness; conjoining
   the literal runs remains available as a filter-scan optimization only.
 
@@ -4102,13 +4251,95 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   `Regex` is a substring search, not a full match, so it needs no outer anchor, unlike
   `Glob`, which does need its leading and trailing `*`.
 
-  **Still open**: whether Q13 rides with it; the lexing rule for `_` (whitespace-
+  ~~**Still open**: whether Q13 rides with it; the lexing rule for `_` (whitespace-
   delimited only, or any separator); what a condition consisting only of wildcards
   does (today a bare `_` is `condition_empty`; as a wildcard it would mean "match
   everything", which D7 forbids, so it must still be rejected with different copy);
   whether the 4 KiB filterable-value limit applies to a `glob` column (order 10²–10³
   rows would exceed it); and that `coll(_)`, which §5.1 rules matches nothing on
-  purpose, would start matching `coll(<anything>)`.
+  purpose, would start matching `coll(<anything>)`.~~ The `_`-specific opens
+  (lexing rule, wildcard-only condition, `coll(_)`) died with the wildcard; the
+  4 KiB question was closed above (does not apply); whether Q13 rides with the
+  same re-export remains open.
+
+  **The design as it now stands (2026-08-26, the user's final rulings).** A
+  condition is one of exactly two forms: a **token-sequence condition** — the
+  text is tokenized and compiled to `ContainsTokenSequence`, exactly as today —
+  or a **regex condition**, in which the user writes a raw regular expression
+  and it is sent, verbatim, as a `Regex` filter over that field's `\n`-joined
+  subtoken column (leading and trailing `\n` sentinels, as specified above).
+  There is no `_` wildcard, no server-side pattern synthesis, and therefore
+  **no escaping pipeline at all** — the `escape-string-regexp` verification
+  above is recorded work that nothing now uses. What makes the raw-regex form
+  viable is the pair of facts this entry established: under the count router
+  (§6.3c) a bare `Regex` filter is **exact** — no conjunction repair, whose
+  extraction from an arbitrary user pattern would be impossible anyway — and
+  the engine is Rust `regex`, whose **linear-time guarantee means no user
+  pattern can be a denial-of-service** (no backtracking blowup exists in that
+  engine; cost is bounded by the scan the count round pays regardless, measured
+  10–385 ms per pattern at 1.2M rows).
+
+  What the reader must be told, in the interface's own documentation (copy
+  needs the user's wording): patterns match a **substring of the token stream**
+  — the field's subtokens joined by `\n` with a `\n` at each end — so a literal
+  token is spelled `\nfoo\n`, "skip one or more tokens" is spelled
+  `(?:[^\n]+\n)+` (`.` does not cross `\n`; `(?s:.)*` is the zero-or-more gap),
+  and regex metacharacters that are ordinary Isabelle syntax (`+ * ( ) [ ]`)
+  must be escaped by the user — the burden of escaping moves to the reader,
+  which the user accepted knowingly: the site's users are all power users.
+
+  **Dialect checking.** The only authority on the dialect is turbopuffer's own
+  parser (Rust `regex`: no look-around, no backreferences — its error strings
+  are legible and were how the engine was identified). Two-layer validation:
+  client-side live checking with a Rust-`regex`-compiled-to-WASM checker if a
+  sound package exists (verify during implementation, do not assume), and, as
+  the authoritative backstop, the Worker's own count round — a malformed
+  pattern makes the `aggregate_by` count query fail with the parser's message,
+  which the interface surfaces. The backstop costs nothing extra: the count
+  round runs anyway.
+
+  **Schema consequence.** The three new columns are
+  `{"type": "string", "regex": true}` — the `glob` flag is dropped; nothing
+  uses it (the Regex-over-Glob choice above is thereby final, now on the
+  stronger ground that Glob has no user-facing form at all).
+
+  **Routing.** A regex condition is a condition like any other: the count
+  round evaluates it exactly, the 3 % line and the fallback of §6.3c apply
+  unchanged. A pattern that matches everything is just a maximally dense
+  condition — it routes to the ANN branch and is not an error (D7's rejection
+  of the *empty* condition text is unchanged and happens before any request).
+
+  **Measurements recorded for the router (2026-08-26, production, read-only;
+  all overlap figures are ANN's top 200 against kNN's exact top 200, three
+  query vectors per condition of which one — a long equation — is the
+  adversarial direction for `=`-shaped conditions):** the fourteen dense
+  conditions first cited in §6.3c were thirteen single tokens plus the pair
+  `⇒ bool`, all positive `ContainsTokenSequence` forms, counts 61k–857k (the
+  857k is `(`), measured with ONE query vector — recorded here so the easy
+  direction is not mistaken for a sample. Today's adversarial sweep: dirty
+  below the line — `x = y` 1.11 % overlap 32–140 with one under-fill (66 rows,
+  caught by the fallback), `= x` 1.40 % down to 148, `a =` 1.68 % down to 102,
+  `= y` 2.43 % down to 108 — and clean in the 2.4–4.1 % window (`⟶` 2.42 %,
+  `if` 2.57 %, `¬` 3.72 %, `( x` 3.82 %, `1` 3.95 %, `-` 4.06 %, `*` 4.10 %:
+  192–200/200 on every vector). Above the line the residual approximation
+  measures 169–200/200 (worst `( '` at 6.74 % → 169; `) =` 18.65 % → 188;
+  `x =` 6.24 % → 187). Negation is the shape density cannot protect:
+  `Not(=)` at 50.95 % overlapped 155/200 on the adversarial vector (195/200
+  elsewhere); `Not(()` at 35.88 % → 191–195. The `All`-panel three-field `Or`
+  behaved like its density class (dirty at 1.11 %, clean at 7.06 %), and
+  clustered theory conditions were exact everywhere tried (they are small, so
+  they route to kNN regardless). Raw output in the session transcript of
+  2026-08-26; scripts under `~/isasearch-pipeline/regexprobe/`.
+
+  **The user's final rulings, verbatim intent:** the line is **3 % of the
+  namespace's row count** (a fraction, so each release re-derives it by
+  construction — every measured dirty full-200 point lies below it and goes to
+  kNN; the 2.4–4.1 % window above it measured clean); negation-shaped and
+  other above-the-line conditions are **served from ANN and tagged
+  approximate** — not forced through a 5–6 s kNN, not refused — with the
+  measured 169–200/200 recorded as what "approximate" means there, and the
+  under-fill fallback catching the rest; and the raw-regex replacement of the
+  wildcard, recorded above.
 
 ## 13b. Reader testing of the interface copy — done
 
@@ -4306,6 +4537,38 @@ escape survives as literal text and at least spells the word. The abandoned clau
 recorded here so that the D43-D46 review §16.7 still owes does not propose it as new:
 it is not an oversight, it is a design the user considered and dropped, and no
 `spell:` field exists in any symbols file today.
+
+### 14.10 Refusing conditioned searches whose match count exceeds the router's line
+
+Proposed during the 2026-08-26 adversarial review of §6.3c and rejected: refuse any
+search whose condition matches more than the 3 % line, so that the site has one rank
+mode and one guarantee. Rejected on three grounds. The approximate branch is a good
+answer, not a failure — measured 169–200/200 of the exact top 200 at 40–65 ms across
+every shape tried, where an error page returns nothing. D7 does not extend to it: D7
+rejects a query for which no ranking exists; here a ranking exists and is essentially
+right, and stretching D7 to cover "a ranking that is 99.5 % correct" would change what
+the rule is about. And the refusal copy would have to teach visitors an internal
+threshold the interface otherwise never exposes. A narrower shape-scoped refusal
+(exclusion-dominated searches only) was also weighed; the user instead ruled
+(2026-08-26) that above-the-line searches, negations included, are served and tagged
+approximate. Do not re-raise without new evidence — specifically, telemetry showing
+the under-fill fallback or the approximate tag firing at rates that change the
+product story.
+
+### 14.11 Precomputing condition match counts at export time
+
+Proposed as an elegance win over §6.3c's live count round (counts are static per
+namespace) and refuted on arithmetic. A per-token document-frequency table bounds a
+sequence's count only from above — `count(sequence) ≤ min over its tokens` — and the
+bound is loosest exactly where routing matters: `f x = x` has 142 true matches while
+its every token is ubiquitous (`=` alone: 655,804), so the bound routes the motivating
+case to the branch that returned 2 of its 142. Bigram tables (the 833,380-pair
+statistics archived in §13 Q14) tighten the bound and still cannot reach 142 for a
+four-token sequence, and no static table can price a user-written regex at all. The
+live count stays. (Memoising it — a pure function of (namespace, filter tree), and
+namespaces are immutable per release — remains available as a later optimisation in
+the Worker's existing KV binding; that is a cache of the live count, not a
+replacement.)
 
 ## 15. Implementation handover, 2026-08-14 — superseded
 
@@ -5049,8 +5312,17 @@ the deletion quota?*
   and 100 (12 measurements): every one returned the full requested top_k with
   recall 1.000 and an ordering byte-identical to exact cosine over the whole
   filtered set, which is the behaviour of exhaustive scoring inside a mask this
-  small. §6.6's guarantee holds; the design problem this bullet feared does not
-  exist. Side yield, exact via the aggregate endpoint
+  small. ~~§6.6's guarantee holds; the design problem this bullet feared does not
+  exist.~~ **That conclusion was falsified on 2026-08-26** — it generalised from
+  one filter shape to all of them. The measurement above remains true *of what it
+  measured*: a scalar `kind In` filter selecting a few hundred rows, whose tiny
+  mask gets exhaustive scoring. §13 Q14 measured the same question for
+  `ContainsTokenSequence` over common tokens and got the opposite answer
+  (`f x = x`, 142 true matches, 2 returned) — the loss tracks the filter's
+  required-token frequency, not its selectivity, which is why one narrow filter
+  is exact and another narrow filter collapses. The design problem this bullet
+  feared is real, and §6.3c's count router is the response. Side yield, exact via
+  the aggregate endpoint
   (`{"aggregate_by": {"n": ["Count","id"]}}` works): the corpus has exactly 11
   `kind` values — lemma 1,031,439; constant 176,008; introduction rule 58,947;
   elimination rule 28,311; case-split rule 10,193; locale 9,928; type 9,420;

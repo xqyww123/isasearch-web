@@ -1062,6 +1062,21 @@ is what a visitor gets. **Your own browser is the one cache the purge cannot cle
    add `-o -` to see `{"error":{"code":"burst_limit","layer":"edge"}}`. Fonts and
    pages must be unaffected — the rule is scoped to `/api/search` alone.
 
+7. **The count router, once the Worker implements it (plan §6.3c).** Three checks,
+   all through `/api/search` — a curl straight at turbopuffer exercises no line of
+   the router and passes even when the router is absent or inverted:
+   - A conditioned search for `f x = x` (Expression panel) returns **every** true
+     match: assert against an independent aggregate count over the whole filter
+     tree *including a kind selection*, and state the expected number after the
+     entity collapse (rows and cards differ by ~3–9 %).
+   - The branch boundary: pick one condition, run it with the 3 % line set just
+     above and just below its match count (the line lives in `wrangler.toml
+     [vars]`). Below-line must be row-complete; above-line must return 200 within
+     the deadline **and** overlap the below-line run by ≥ 195/200. The overlap
+     half is also the **per-release re-establishment of the approximate branch's
+     guarantee** — it is a property of each index build, not of the design.
+   - Both runs' rows carry `$dist` (the similarity column is computed from it).
+
 The read-only probe covers the machine-facing half:
 
 ```bash
