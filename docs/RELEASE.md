@@ -508,7 +508,8 @@ in one implementation only, which is what the gate is for.
 
 **If the tokenizer changed, run the tokenizer gate.** It is the only thing that holds
 the two implementations to each other (§16.6). Precondition 6's `pytest tests/` covers
-one of its four commands — `tests/test_isabelle_tokenizer.py`, 71 cases — and nothing
+one of its four commands — `tests/test_isabelle_tokenizer.py`, 72 cases, of which one
+skips unless a live Isabelle symbol table is reachable — and nothing
 covers the other three, so run them explicitly. None needs Isabelle or the database:
 
 ```bash
