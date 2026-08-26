@@ -777,21 +777,34 @@ Then, when a source position is recorded:
 
 > **Source**
 > This entity was produced by the command at HOL-Computational_Algebra.Primes.thy:525.
-> Defined in HOL-Computational_Algebra.Primes
 
-(The first line's link text is the theory's full name with the line, as on the
-card — §4.4.)
+(The link text is the theory's full name with the line, as on the card — §4.4.)
 
 and when none is recorded:
 
 > **Source**
 > No source position was recorded for this entity. Some commands do not report
 > one.
-> Defined in Abstract_Reachability_Analysis.Approximation_Bounds
 
-**The `Defined in` line names the theory the entity is written in**, and the
-theory is a link, addressed exactly as the chips above are. Approved
-2026-08-26, in the user's own words. Three things were settled with it:
+### 8.1 The `Defined in` line
+
+**Directly under the statement box and outside it** — the user's placement,
+settled 2026-08-26 after a first attempt put it inside the Source block, where
+it sat under a sentence naming the same theory, in the same size and colour, and
+he could not find it on the page at all:
+
+> Statement                                          [copy]
+> ┌──────────────────────────────────────────────────┐
+> │ …the statement…                                  │
+> └──────────────────────────────────────────────────┘
+> Defined in «Complex_Bounded_Operators.Complex_Vector_Spaces0»
+
+**It names the theory the entity is written in**, and the theory is a link,
+addressed exactly as the chips below are. `Defined in` is a muted sans-serif
+label and the theory is monospaced with a faint underline: the two halves must
+not read as one line of prose, which is what went wrong the first time.
+
+Three things were settled with it:
 
 - **It is always shown**, not only when it says something the line above does
   not. On about 98.5 % of pages it names the theory that line already names,
@@ -809,8 +822,11 @@ theory is a link, addressed exactly as the chips above are. Approved
   word is the user's own from the filters panel, "Theory Name: the defining
   theories of the entities".
 - **The line is omitted entirely** for the 533 records (0.04 %) whose defining
-  theory could not be determined. No absent form: the Source line above already
-  carries its own, and a second "not known" beneath it would say nothing new.
+  theory could not be determined. No absent form: the Source block has its own,
+  and a second "not known" elsewhere on the page would say nothing new.
+- **The result card does not carry it** (ruled 2026-08-26). The card's source
+  line already names the theory for all but the `.ML` positions, and the user
+  declined a second line there.
 
 Then:
 

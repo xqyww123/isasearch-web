@@ -54,8 +54,9 @@ export function entityPageOf(card, nearest, site) {
     kind: kindBadge(card.kinds[0], true),
     expr: esc(card.expr),
     explanation: explanation(card),
+    definedIn: definedIn(card),
     theories,
-    source: sourceLink(card, true) + definedIn(card),
+    source: sourceLink(card, true),
     nearest: list,
   });
 }

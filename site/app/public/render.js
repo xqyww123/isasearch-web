@@ -176,8 +176,8 @@ export function sourceLink(card, verbose = false) {
  * that have no defining theory — the line above carries its own.
  */
 export const definedIn = (card) => card.theory
-  ? `<div class="defined-in">${esc(COPY.definedIn)} `
-    + `<a class="mono" href="${esc(theoryHref(card.theory))}">${esc(card.theory)}</a></div>`
+  ? `<div class="defined-in"><span class="lead">${esc(COPY.definedIn)}</span> `
+    + `<a href="${esc(theoryHref(card.theory))}">${esc(card.theory)}</a></div>`
   : '';
 
 // `theoryLine` stood here until 2026-08-26, printing D26's marking on a theorem

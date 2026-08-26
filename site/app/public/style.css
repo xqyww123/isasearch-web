@@ -187,8 +187,10 @@ code { font-size: 0.95em; }
 .section-note { font-size: 12px; line-height: 1.6; color: #75736c; }
 .theory-chips { display: flex; flex-wrap: wrap; gap: 6px 8px; }
 .theory-chip { font-family: 'PhiSymbols', monospace; font-size: 12px; border: 1px solid #e0ddd6; background: #ffffff; padding: 3px 9px; color: #45443f; }
-.defined-in { margin-top: 4px; }
-.defined-in a { color: inherit; }
+.defined-in { margin-top: 7px; font-size: 12px; color: #75736c; }
+.defined-in .lead { font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+.defined-in a { font-family: 'IBM Plex Mono', monospace; color: #45443f; text-decoration: underline; text-decoration-color: #cfcbc2; text-underline-offset: 2px; }
+.defined-in a:hover { text-decoration-color: currentColor; }
 .source-box { border: 1px solid #e5e3de; background: #ffffff; padding: 12px 14px; font-size: 13px; color: #45443f; line-height: 1.6; }
 .entity-aside { border-left: 1px solid #e5e3de; padding: 30px 26px 60px; display: flex; flex-direction: column; gap: 12px; align-self: stretch; background: #f7f6f3; min-height: 100%; }
 .nearest { display: flex; flex-direction: column; }
