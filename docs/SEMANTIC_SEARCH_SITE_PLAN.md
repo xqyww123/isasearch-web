@@ -2570,8 +2570,8 @@ price at which it was accepted.
 | embedding | 50–300 ms | 4 s | yes | retry once | never |
 | count, kind-only tree | 9–28 ms | 4 s | yes | retry once | never |
 | count, tree with a regex condition | ~10 ms–~1.3 s (pattern-dependent; production extrapolation for a weak-literal pattern) | 8 s | **no** — the work is deterministic; a retry doubles the scan | retry once | never — a parse error is the dialect backstop, rendered via COPY §5.8 |
-| ANN | 40–65 ms warm; **9.1–9.6 s cold** (four observations) | 12 s | yes | retry once | never |
-| kNN, exact branch | 86 ms–1.5 s (one >300 s hang after idle; 542 ms on retry) | 12 s | yes | retry once | never |
+| ANN | 40–65 ms warm; **9.1–9.6 s cold** (four observations) | 12 s | **no** — the ruled ≤ 8 s rule; the deadline is sized above the cold start, so a timeout means the work really is that large | retry once | never |
+| kNN, exact branch | 86 ms–1.5 s (one >300 s hang after idle; 542 ms on retry) | 12 s | **no** — same rule | retry once | never |
 | kNN, fallback branch | 5–8 s at the densities where it can fire | **15 s** | **no** | retry once | never |
 
 **Every cost figure above was measured on the `\n`-joined subtoken columns,

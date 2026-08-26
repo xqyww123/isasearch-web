@@ -71,7 +71,12 @@ code { font-size: 0.95em; }
 .polarity[data-polarity="excludes"]:hover { background: oklch(0.91 0.06 25); border-color: oklch(0.72 0.1 25); }
 .polarity .swap { font-size: 12px; opacity: 0.65; }
 .condition-box { width: 460px; max-width: 50vw; border: 1px solid #d9d6cf; background: #ffffff; padding: 5px 9px; font-family: 'PhiSymbols', monospace; font-size: 13px; outline: none; }
-.condition-error { font-size: 11.5px; line-height: 1.5; color: oklch(0.45 0.11 25); max-width: 600px; }
+/* §3.2: an invalid pattern outlines its box in red, live. */
+.condition-box.invalid { border-color: oklch(0.55 0.16 25); box-shadow: 0 0 0 1px oklch(0.55 0.16 25); }
+.condition-error { font-size: 11.5px; line-height: 1.5; color: oklch(0.45 0.11 25); max-width: 600px; white-space: pre-wrap; }
+/* The engine's multi-line parse errors carry caret art that only lines up in
+   the pattern's own font. */
+.condition-error.engine { font-family: 'PhiSymbols', monospace; }
 .remove { width: 28px; background: transparent; border: 1px solid #e0ddd6; color: #8a877f; font-size: 13px; cursor: pointer; }
 .remove:hover { border-color: #8a877f; color: #1b1b19; }
 .add-condition { background: transparent; border: 1px dashed #cfcbc2; padding: 4px 10px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5f5d57; cursor: pointer; }

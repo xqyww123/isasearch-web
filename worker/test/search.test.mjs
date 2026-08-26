@@ -1,19 +1,13 @@
-// Unit tests for the Worker's pure core: kinds, request compilation, query-body
-// construction, response reading, D5 collapse, D26 marking.  Run with:
+// Unit tests for the Worker's pure core: kinds, request compilation, the query
+// bodies, §6.3c's route and certificate, response reading, D5 collapse.  Run:
 //   node --test worker/test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
-import { Tokenizer } from '../../site/tokenizer/isabelle_tokenizer.js';
 import { KINDS, canonicalKinds, embeddingInput } from '../src/kinds.js';
-import { compileRequest, normalizeQuery, tupfQueryBody, rowsOf, collapse, entityOf,
+import { compileRequest, normalizeQuery, tupfQueryBody, tupfCountBody,
+         rowsOf, countOf, routeOf, certified, collapse, entityOf,
          SearchError, RESULT_LIMIT } from '../src/search.js';
-
-const asset = JSON.parse(readFileSync(
-  fileURLToPath(new URL('../../site/tokenizer/asset.json', import.meta.url)), 'utf8'));
-const tokenizer = new Tokenizer(asset);
 
 // ---- kinds ----------------------------------------------------------------
 
@@ -50,7 +44,7 @@ test('§11.1 normalisation: NFC, trim, inner whitespace folded — nothing more'
   assert.equal(normalizeQuery('Sorted LISTS'), 'Sorted LISTS');   // no case folding
 });
 
-const compile = (body) => compileRequest(body, tokenizer);
+const compile = (body) => compileRequest(body);
 const failsWith = (body, code) => {
   try {
     compile(body);
@@ -79,15 +73,18 @@ test('D29 caps: 8000-code-point query, 512-code-point condition', () => {
   failsWith({ query: 'q', conditions: [long] }, 'condition_too_long');
 });
 
-test('a separators-only condition is rejected, with its index', () => {
+test('§6.3: an empty condition is rejected with its index; whitespace is not empty', () => {
   const e = failsWith({
     query: 'q',
     conditions: [
       { on: 'expr', polarity: 'contains', text: 'sorted' },
-      { on: 'expr', polarity: 'contains', text: '_ . _' },
+      { on: 'expr', polarity: 'contains', text: '' },
     ],
   }, 'condition_empty');
   assert.equal(e.params.index, 1);
+  // A space is a meaningful pattern, never treated as empty.
+  assert.ok(compile({
+    query: 'q', conditions: [{ on: 'expr', polarity: 'contains', text: ' ' }] }));
 });
 
 test('kinds: unknown rejected; empty sends no condition; canonicalised', () => {
@@ -98,78 +95,113 @@ test('kinds: unknown rejected; empty sends no condition; canonicalised', () => {
                    ['kind', 'In', ['lemma', 'constant']]);
 });
 
-test('§6.3: the compiled filter forms', () => {
+test('§6.3: the compiled filter forms — a condition is a Regex over the raw column', () => {
   const one = compile({
     query: 'q',
     conditions: [{ on: 'expr', polarity: 'contains', text: 'sorted_wrt' }],
   });
-  assert.deepEqual(one.filters,
-    ['expr_subtokens', 'ContainsTokenSequence', ['sorted', 'wrt']]);
-  assert.deepEqual(one.parts, [['sorted', 'wrt']]);
+  assert.deepEqual(one.filters, ['expr', 'Regex', 'sorted_wrt']);
+  assert.equal(one.hasRegex, true);
 
+  // excludes is the measured-exact complement, Not(Regex).
   const ex = compile({
     query: 'q',
     conditions: [{ on: 'name', polarity: 'excludes', text: 'induct' }],
   });
-  assert.deepEqual(ex.filters,
-    ['Not', ['name_subtokens', 'ContainsTokenSequence', ['induct']]]);
+  assert.deepEqual(ex.filters, ['Not', ['name', 'Regex', 'induct']]);
 
-  // excludes(all) is Not(Or(...)) — "appears in none of the three".
-  const all = compile({
+  // The pattern reaches the filter as typed (after NFC), metacharacters and
+  // anchors included — the box's content IS the pattern.
+  const anchored = compile({
     query: 'q',
-    conditions: [{ on: 'all', polarity: 'excludes', text: 'List' }],
+    conditions: [{ on: 'name', polarity: 'contains', text: '\\<sorted\\>|^List\\.' }],
   });
-  assert.deepEqual(all.filters, ['Not', ['Or', [
-    ['name_subtokens', 'ContainsTokenSequence', ['List']],
-    ['expr_subtokens', 'ContainsTokenSequence', ['List']],
-    ['theory_subtokens', 'ContainsTokenSequence', ['List']],
-  ]]]);
+  assert.deepEqual(anchored.filters, ['name', 'Regex', '\\<sorted\\>|^List\\.']);
 
   const combined = compile({
     query: 'q',
     kinds: ['lemma', 'constant'],
     conditions: [{ on: 'theory', polarity: 'contains', text: 'HOL-Library' }],
   });
-  // D21 keeps operator tokens: the hyphen survives as its own subtoken.
   assert.deepEqual(combined.filters, ['And', [
-    ['theory_subtokens', 'ContainsTokenSequence', ['HOL', '-', 'Library']],
+    ['theory', 'Regex', 'HOL-Library'],
     ['kind', 'In', ['lemma', 'constant']],
   ]]);
+  // A kind-only tree routes like everything else, but carries no regex —
+  // the count leg's deadline class and the timeout copy both read this.
+  const kindOnly = compile({ query: 'q', kinds: ['lemma'] });
+  assert.equal(kindOnly.hasRegex, false);
+  assert.deepEqual(kindOnly.filters, ['kind', 'In', ['lemma']]);
 });
 
-// `theoryParts` and D26's marking were deleted 2026-08-26: a record carries the
-// one theory it is written in, so a Theory Name condition that matches has
-// matched that, and there is no longer a set to pick the matching member out of.
-
-test('the tokenizer resolves ASCII escapes in a condition', () => {
-  const { parts } = compile({
+test("on: 'all' was deleted from the API (user-ruled 2026-08-26)", () => {
+  const e = failsWith({
     query: 'q',
-    conditions: [{ on: 'expr', polarity: 'contains', text: '\\<Longrightarrow>' }],
-  });
-  assert.deepEqual(parts, [['⟹']]);
+    conditions: [{ on: 'all', polarity: 'excludes', text: 'List' }],
+  }, 'bad_request');
+  assert.equal(e.params.index, 0);
 });
 
-// ---- tupfQueryBody / rowsOf -------------------------------------------------
+// ---- the query bodies / response readers -----------------------------------
 
-test('the request body: the vector leg alone, filters on it, no fusion', () => {
+test('the ranked body: one vector leg, filters on it, both rank modes', () => {
   const vector = [0.1, 0.2];
   const filters = ['kind', 'In', ['lemma']];
 
-  const single = tupfQueryBody({ vector, filters });
-  assert.equal(single.queries.length, 1);
-  assert.deepEqual(single.queries[0].rank_by, ['vector', 'ANN', vector]);
-  assert.deepEqual(single.queries[0].filters, filters);
-  assert.equal(single.queries[0].top_k, RESULT_LIMIT);
-  assert.ok(!('rerank_by' in single));
+  const ann = tupfQueryBody({ vector, filters });
+  assert.equal(ann.queries.length, 1);
+  assert.deepEqual(ann.queries[0].rank_by, ['vector', 'ANN', vector]);
+  assert.deepEqual(ann.queries[0].filters, filters);
+  assert.equal(ann.queries[0].top_k, RESULT_LIMIT);
+  assert.ok(!('rerank_by' in ann));
+
+  // §6.3c: the exhaustive kNN rank mode differs in the rank_by spelling only.
+  const knn = tupfQueryBody({ vector, filters, mode: 'kNN' });
+  assert.deepEqual(knn.queries[0].rank_by, ['vector', 'kNN', vector]);
+  assert.deepEqual({ ...knn.queries[0], rank_by: null },
+                   { ...ann.queries[0], rank_by: null });
 
   const unfiltered = tupfQueryBody({ vector, filters: null });
   assert.ok(!('filters' in unfiltered.queries[0]));
 });
 
-test('rowsOf accepts exactly one results entry and refuses the unfused shape', () => {
+test('the count body: the same tree, no vector, one Count aggregation', () => {
+  const filters = ['expr', 'Regex', 'sorted'];
+  assert.deepEqual(tupfCountBody(filters),
+    { queries: [{ aggregate_by: { n: ['Count', 'id'] }, filters }] });
+});
+
+test('rowsOf accepts exactly one results entry and refuses anything else', () => {
   assert.deepEqual(rowsOf({ results: [{ rows: [{ id: 1 }] }] }), [{ id: 1 }]);
   assert.throws(() => rowsOf({ results: [{ rows: [] }, { rows: [] }] }), /expected one/);
   assert.throws(() => rowsOf({ rows: [] }), /expected one/);
+});
+
+test('countOf reads results[0].aggregations.n and refuses anything else', () => {
+  assert.equal(countOf({ results: [{ aggregations: { n: 142 } }] }), 142);
+  assert.equal(countOf({ results: [{ aggregations: { n: 0 } }] }), 0);
+  assert.throws(() => countOf({ results: [{ aggregations: {} }] }), /non-negative integer/);
+  assert.throws(() => countOf({ results: [{ aggregations: { n: -1 } }] }), /non-negative integer/);
+  assert.throws(() => countOf({ results: [] }), /expected one/);
+});
+
+// ---- §6.3c: the route and the certificate ----------------------------------
+
+test('the route: empty at 0, kNN under the line, ANN at and above it', () => {
+  const ROWS = 1_337_009, LINE = 0.03;
+  assert.equal(routeOf(0, ROWS, LINE), 'empty');
+  assert.equal(routeOf(1, ROWS, LINE), 'knn');
+  assert.equal(routeOf(Math.ceil(ROWS * LINE) - 1, ROWS, LINE), 'knn');
+  assert.equal(routeOf(Math.ceil(ROWS * LINE), ROWS, LINE), 'ann');
+  assert.equal(routeOf(ROWS, ROWS, LINE), 'ann');
+});
+
+test('the certificate: rows == min(count, top_k)', () => {
+  assert.ok(certified(142, 142));            // fewer matches than top_k: all owed
+  assert.ok(certified(200, 2831));           // more matches: exactly top_k owed
+  assert.ok(!certified(74, 2831));           // the measured ANN loss shape
+  assert.ok(!certified(141, 142));           // a kNN shortfall is a violation
+  assert.ok(!certified(199, 200));
 });
 
 // ---- collapse and D26 marking ---------------------------------------------

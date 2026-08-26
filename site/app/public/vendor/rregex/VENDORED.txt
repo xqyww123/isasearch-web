@@ -1,0 +1,5 @@
+rregex 1.13.1 (https://github.com/2fd/rregex, Apache-2.0): the wasm-bindgen
+"web" build (lib/web.js + lib/rregex.wasm), vendored unmodified.  It embeds
+Rust regex 1.13.1 / regex-syntax 0.8.11 - the SAME dialect turbopuffer runs,
+which is the whole point (plan section 6.3c: JavaScript RegExp must never
+validate).  Update by copying the two files from the npm package.

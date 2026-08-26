@@ -6,6 +6,8 @@
 // embeds (and caches) separately, as it must: the {kinds} phrase changes the
 // vector.
 
+import { UpstreamError } from './search.js';
+
 export const DIMENSION = 4096;
 
 // Search traffic is Zipf-distributed; a month keeps the head warm and lets
@@ -27,7 +29,7 @@ function l2Normalize(vector) {
 
 /** One embedding over the wire.  `input` is the finished instruction-wrapped
  * text (kinds.embeddingInput); the caller never passes a raw query here. */
-export async function fireworksEmbed(input, { apiKey, model, fetchImpl = fetch }) {
+export async function fireworksEmbed(input, { apiKey, model, signal, fetchImpl = fetch }) {
   const resp = await fetchImpl('https://api.fireworks.ai/inference/v1/embeddings', {
     method: 'POST',
     headers: {
@@ -35,10 +37,10 @@ export async function fireworksEmbed(input, { apiKey, model, fetchImpl = fetch }
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ model, input: [input] }),
+    signal,
   });
   if (!resp.ok) {
-    const detail = (await resp.text()).slice(0, 300);
-    throw new Error(`Fireworks embeddings: HTTP ${resp.status}: ${detail}`);
+    throw new UpstreamError('Fireworks embeddings', resp.status, await resp.text());
   }
   const data = await resp.json();
   const embedding = data?.data?.[0]?.embedding;
@@ -55,13 +57,14 @@ export async function fireworksEmbed(input, { apiKey, model, fetchImpl = fetch }
 /** The cached embedding of one instruction-wrapped text.  The cache write is
  * a side effect handed to `ctx.waitUntil`: it neither delays the answer nor,
  * by failing, turns a computed search into an error. */
-export async function embedQuery(input, env, ctx) {
+export async function embedQuery(input, env, ctx, signal) {
   const kvKey = `emb:${await sha256hex(input)}`;
   const hit = await env.EMBED_KV.get(kvKey, 'arrayBuffer');
   if (hit && hit.byteLength === DIMENSION * 4) return new Float32Array(hit);
   const vector = await fireworksEmbed(input, {
     apiKey: env.FIREWORKS_API_KEY,
     model: env.FIREWORKS_MODEL,
+    signal,
   });
   ctx.waitUntil(env.EMBED_KV.put(kvKey, vector.buffer, { expirationTtl: CACHE_TTL_SECONDS }));
   return vector;

@@ -1,7 +1,6 @@
 // The search request: validation, §6.3's filter compilation, the turbopuffer
-// query body, and D5's response collapse.  Everything here is pure — the
-// tokenizer comes in as an argument — so the tests and the live probe exercise
-// exactly what the Worker runs.
+// query bodies, and D5's response collapse.  Everything here is pure, so the
+// tests and the live probe exercise exactly what the Worker runs.
 
 import { KINDS, canonicalKinds } from './kinds.js';
 
@@ -15,12 +14,9 @@ export const MAX_CONDITIONS = 64;
 // Fetch depth (D29): the top 200 of the vector leg, no second request.
 export const RESULT_LIMIT = 200;
 
-const FIELD_OF = {
-  name: 'name_subtokens',
-  expr: 'expr_subtokens',
-  theory: 'theory_subtokens',
-};
-const PANELS = ['name', 'expr', 'theory', 'all'];
+// A condition names one raw text column (§6.3 as amended: `on: 'all'` was
+// deleted from the API 2026-08-26, user-ruled).
+const PANELS = ['name', 'expr', 'theory'];
 const POLARITIES = ['contains', 'excludes'];
 
 // What a result card needs and nothing else: no vector, no subtoken arrays.
@@ -37,6 +33,17 @@ export class SearchError extends Error {
   }
 }
 
+/** A backend request that failed with an HTTP status.  The body is kept in
+ * full up to 4 KiB (§6.3c: turbopuffer's regex parse errors can be multi-line,
+ * and the client renders the engine's message verbatim — COPY §5.8). */
+export class UpstreamError extends Error {
+  constructor(service, status, body) {
+    super(`${service}: HTTP ${status}: ${String(body).slice(0, 200)}`);
+    this.status = status;
+    this.body = String(body).slice(0, 4096);
+  }
+}
+
 const codePoints = (s) => Array.from(s).length;
 
 /** §11.1's "normalised query string", defined here and nowhere else: NFC,
@@ -49,12 +56,17 @@ export function normalizeQuery(s) {
 
 /** Validate the request body and compile §6.3's filter tree.
  *
- * Returns { query, kinds, filters, parts }:
- *   filters      the tree attached to every leg (null when nothing filters)
- *   parts        each condition's surviving subtokens, in request order — the
- *                §5.1 empty state prints them
+ * A condition is a regular expression over the field's raw displayed text
+ * (§13 Q14, the final ruling): NFC-normalised — the box's content IS the
+ * pattern, nothing else is applied — and compiled to a `Regex` filter;
+ * `excludes` is its measured-exact complement `Not(Regex)`.
+ *
+ * Returns { query, kinds, filters, hasRegex }:
+ *   filters      the tree attached to every query (null when nothing filters)
+ *   hasRegex     whether any condition is present — it decides the count leg's
+ *                deadline class and the timeout copy (§6.3c)
  */
-export function compileRequest(body, tokenizer) {
+export function compileRequest(body) {
   if (typeof body !== 'object' || body === null) throw new SearchError('bad_request');
   if (typeof body.query !== 'string') throw new SearchError('query_missing');
   const query = normalizeQuery(body.query);
@@ -74,7 +86,6 @@ export function compileRequest(body, tokenizer) {
   }
 
   const clauses = [];
-  const parts = [];
   conditions.forEach((c, index) => {
     if (typeof c !== 'object' || c === null || typeof c.text !== 'string'
         || !POLARITIES.includes(c.polarity) || !PANELS.includes(c.on)) {
@@ -83,19 +94,14 @@ export function compileRequest(body, tokenizer) {
     if (codePoints(c.text) > CONDITION_CAP) {
       throw new SearchError('condition_too_long', { index, cap: CONDITION_CAP });
     }
-    const sub = tokenizer.run(c.text);
-    parts.push(sub);
-    if (sub.length === 0) {
-      // §6.3: an empty subtoken list would match everything; reject it and say
-      // which condition it was, never silently drop it.
+    const pattern = c.text.normalize('NFC');
+    if (pattern === '') {
+      // §6.3: an empty pattern is a valid regular expression that matches
+      // every row (measured) — the outcome D7 forbids.  Whitespace-only text
+      // is NOT empty: a space is a meaningful pattern.
       throw new SearchError('condition_empty', { index });
     }
-    // D22 on the `All` panel: excludes means "appears in none of the three" —
-    // Not(Or(…)), never Or(Not(…),…).
-    const contains = c.on === 'all'
-      ? ['Or', ['name', 'expr', 'theory'].map(
-          (f) => [FIELD_OF[f], 'ContainsTokenSequence', sub])]
-      : [FIELD_OF[c.on], 'ContainsTokenSequence', sub];
+    const contains = [c.on, 'Regex', pattern];
     clauses.push(c.polarity === 'contains' ? contains : ['Not', contains]);
   });
 
@@ -107,19 +113,20 @@ export function compileRequest(body, tokenizer) {
     clauses.length === 0 ? null
     : clauses.length === 1 ? clauses[0]
     : ['And', clauses];
-  return { query, kinds, filters, parts };
+  return { query, kinds, filters, hasRegex: conditions.length > 0 };
 }
 
 
-/** The turbopuffer request body for one search: a `multi_query` with the
+/** The turbopuffer request body for one ranked query: a `multi_query` with the
  * vector leg alone (the BM25 leg and RRF fusion were dropped 2026-08-25: the
  * user measured the hybrid results as worse).  The filter tree rides on the
  * leg and runs first — the 200 are the top of what survives it (§6.6).
- */
-export function tupfQueryBody({ vector, filters }) {
+ * `mode` is one of §6.3c's two rank modes: 'ANN' (fast, approximate) or 'kNN'
+ * (exhaustive, exact; requires a filter). */
+export function tupfQueryBody({ vector, filters, mode = 'ANN' }) {
   return {
     queries: [{
-      rank_by: ['vector', 'ANN', vector],
+      rank_by: ['vector', mode, vector],
       top_k: RESULT_LIMIT,
       include_attributes: INCLUDE_ATTRIBUTES,
       ...(filters ? { filters } : {}),
@@ -127,17 +134,58 @@ export function tupfQueryBody({ vector, filters }) {
   };
 }
 
-/** The rows of a `multi_query` response.  Exactly one `results` entry is the
- * invariant: anything else is an error, never a guess. */
-export function rowsOf(data) {
+/** §6.3c's standalone exact count over the same tree, no vector. */
+export function tupfCountBody(filters) {
+  return { queries: [{ aggregate_by: { n: ['Count', 'id'] }, filters }] };
+}
+
+/** Exactly one `results` entry is the invariant of every `multi_query` this
+ * Worker sends: anything else is an error, never a guess. */
+function resultOf(data) {
   const results = data?.results;
-  if (!Array.isArray(results) || results.length !== 1 || !Array.isArray(results[0]?.rows)) {
+  if (!Array.isArray(results) || results.length !== 1) {
     throw new Error(
-      `turbopuffer query: expected one results entry with rows, got `
+      `turbopuffer query: expected one results entry, got `
       + `${Array.isArray(results) ? results.length + ' entries' : typeof results}`);
   }
-  return results[0].rows;
+  return results[0];
 }
+
+/** The rows of a ranked `multi_query` response. */
+export function rowsOf(data) {
+  const rows = resultOf(data).rows;
+  if (!Array.isArray(rows)) throw new Error('turbopuffer query: no rows in the results entry');
+  return rows;
+}
+
+/** The exact match count of a `tupfCountBody` response (§6.3c: it arrives at
+ * `results[0].aggregations.n`). */
+export function countOf(data) {
+  const n = resultOf(data).aggregations?.n;
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(`turbopuffer count: expected a non-negative integer, got ${JSON.stringify(n)}`);
+  }
+  return n;
+}
+
+// ---------------------------------------------------------------------------
+// §6.3c's route and certificate, as pure functions of the numbers.
+// ---------------------------------------------------------------------------
+
+/** Which query the router issues, given the tree's exact match count and the
+ * namespace's row count (`ROWS` from wrangler [vars]; the 3 % line is a
+ * fraction of it).  A null filter tree never reaches this — a search with no
+ * filter at all is plain ANN (kNN requires a filter). */
+export function routeOf(count, rows, fraction) {
+  return count === 0 ? 'empty' : count < rows * fraction ? 'knn' : 'ann';
+}
+
+/** The one certificate everywhere (§6.3c): an exact query returned every row
+ * it owed, `rows == min(count, top_k)`.  Asserted on EVERY kNN result — a
+ * shortfall is a vendor-contract violation and an error, never served — and
+ * its failure on the ANN branch is the under-fill trigger. */
+export const certified = (rowCount, count) =>
+  rowCount === Math.min(count, RESULT_LIMIT);
 
 /** D5's collapse, after ranking, under the user's golden standard of
  * 2026-08-25: two rows are one entity iff both are theorem-alike (32-byte

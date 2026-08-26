@@ -1,34 +1,44 @@
 // Live integration probe: runs the Worker's OWN builders (kinds.js, search.js,
-// embed.js) against the real Fireworks endpoint and the live namespace,
+// embed.js) against the real Fireworks endpoint and a regex-era namespace,
 // read-only.  Not a unit test — needs keys in the environment:
 //   source ~/Current/MLML/secret.sh
 //   TURBOPUFFER_API_KEY="$turbopuffer_DEV_KEY" FIREWORKS_API_KEY="$EMBEDDING_API_KEY" \
-//     node worker/probe/live_probe.mjs
+//     TPUF_NAMESPACE=<namespace> node worker/probe/live_probe.mjs
+// Optionally SITE_URL=https://… adds the deployed-page checks of RELEASE
+// step 10 (/about shows the configured facts).
 //
-// What it proves: the multi_query body shape is what turbopuffer accepts; the
-// filter tree rides the vector leg; a selective filter still fills top_k (the
-// §6.6 guarantee, first measured 2026-08-21); the embedding path returns 4096
-// dims.  It also prints billing.billable_logical_bytes_queried.
+// What it proves (§6.3c): the count body is accepted and the count arrives at
+// results[0].aggregations.n; both rank modes are accepted; every kNN result
+// satisfies the one certificate `rows == min(count, top_k)` (the old checks
+// asserted fullness ⇒ completeness, an inference §13 Q14 disproved);
+// `excludes` = Not(Regex) is the exact complement; a broken pattern 400s with
+// the engine's message where engineMessageOf finds it; rows carry `$dist`.
+// It also asserts wrangler.toml's ROWS is within 1 % of the namespace's
+// approx_row_count (a tolerance check, never the source).
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { Tokenizer } from '../../site/tokenizer/isabelle_tokenizer.js';
 import { embeddingInput } from '../src/kinds.js';
-import { compileRequest, tupfQueryBody, rowsOf, collapse, RESULT_LIMIT } from '../src/search.js';
+import { compileRequest, tupfQueryBody, tupfCountBody, rowsOf, countOf,
+         routeOf, certified, RESULT_LIMIT } from '../src/search.js';
 import { fireworksEmbed, DIMENSION } from '../src/embed.js';
+import { thin } from '../../site/app/public/render.js';
 
-const NAMESPACE = process.env.TPUF_NAMESPACE ?? 'isasearch-2025-2-afp-2026-05-13';
+const NAMESPACE = process.env.TPUF_NAMESPACE;
 const REGION = process.env.TPUF_REGION ?? 'aws-us-west-2';
 const TPUF_KEY = process.env.TURBOPUFFER_API_KEY;
 const FW_KEY = process.env.FIREWORKS_API_KEY;
-if (!TPUF_KEY || !FW_KEY) {
-  console.error('set TURBOPUFFER_API_KEY and FIREWORKS_API_KEY (see the header)');
+if (!NAMESPACE || !TPUF_KEY || !FW_KEY) {
+  console.error('set TPUF_NAMESPACE, TURBOPUFFER_API_KEY and FIREWORKS_API_KEY (see the header)');
   process.exit(2);
 }
 
-const asset = JSON.parse(readFileSync(
-  fileURLToPath(new URL('../../site/tokenizer/asset.json', import.meta.url)), 'utf8'));
-const tokenizer = new Tokenizer(asset);
+// The deployed configuration this namespace must agree with.
+const toml = readFileSync(
+  fileURLToPath(new URL('../wrangler.toml', import.meta.url)), 'utf8');
+const varOf = (name) => toml.match(new RegExp(`^${name} = "([^"]*)"`, 'm'))?.[1];
+const CONFIGURED = { rows: Number(varOf('ROWS')), entities: Number(varOf('ENTITIES')),
+                     built: varOf('BUILT'), fraction: Number(varOf('EXACT_FRACTION')) };
 
 let failures = 0;
 const check = (ok, label, detail = '') => {
@@ -36,7 +46,7 @@ const check = (ok, label, detail = '') => {
   if (!ok) failures += 1;
 };
 
-async function tupf(body) {
+async function tupfRaw(body) {
   const resp = await fetch(
     `https://${REGION}.turbopuffer.com/v2/namespaces/${NAMESPACE}/query`, {
       method: 'POST',
@@ -44,10 +54,12 @@ async function tupf(body) {
                  'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-  const text = await resp.text();
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${text.slice(0, 400)}`);
-  const data = JSON.parse(text);
-  return { ...data, rows: rowsOf(data) };
+  return { status: resp.status, text: await resp.text() };
+}
+async function tupf(body) {
+  const { status, text } = await tupfRaw(body);
+  if (status !== 200) throw new Error(`HTTP ${status}: ${text.slice(0, 400)}`);
+  return JSON.parse(text);
 }
 
 // 1. The embedding path, template included.
@@ -59,52 +71,82 @@ check(vector.length === DIMENSION, `embedding has ${DIMENSION} dimensions`);
 const norm = Math.sqrt(vector.reduce((s, x) => s + x * x, 0));
 check(Math.abs(norm - 1) < 1e-3, 'embedding is unit-normalized', `|v| = ${norm.toFixed(6)}`);
 
-// 2. One multi_query, the vector leg alone, the filter on it.
+// 2. The count leg: the tree of a regex condition, no vector.
 const compiled = compileRequest({
   query,
   conditions: [{ on: 'expr', polarity: 'contains', text: 'sorted' }],
-}, tokenizer);
-const single = await tupf(tupfQueryBody({
-  vector: Array.from(vector), filters: compiled.filters }));
-check(Array.isArray(single.rows), 'multi_query body accepted (rows came back)');
-check(single.rows.length === RESULT_LIMIT,
-      'the vector leg returns the full 200', `${single.rows.length} rows`);
-const first = single.rows[0] ?? {};
+});
+const count = countOf(await tupf(tupfCountBody(compiled.filters)));
+check(Number.isInteger(count) && count > 0,
+      'the count body is accepted and the count arrives at aggregations.n',
+      `${count} matches`);
+const route = routeOf(count, CONFIGURED.rows, CONFIGURED.fraction);
+console.log(`INFO  route for this condition: ${route} `
+            + `(${(100 * count / CONFIGURED.rows).toFixed(2)} % of ${CONFIGURED.rows} rows)`);
+
+// 3. The kNN rank mode under the same tree: the one certificate, never the
+// fullness inference the old probe asserted.
+const knnData = await tupf(tupfQueryBody({
+  vector: Array.from(vector), filters: compiled.filters, mode: 'kNN' }));
+const knn = rowsOf(knnData);
+check(certified(knn.length, count),
+      'kNN satisfies the certificate rows == min(count, top_k)',
+      `${knn.length} rows, ${count} matches, top_k ${RESULT_LIMIT}`);
+check(knn.every((r) => typeof r.$dist === 'number'), 'kNN rows carry $dist');
+check(knn.every((r) => (r.expr ?? '').includes('sorted')),
+      'every kNN row satisfies the literal condition');
+const first = knn[0] ?? {};
 check(typeof first.key === 'string' && typeof first.kind === 'string'
       && typeof first.expr === 'string' && 'source_link' in first,
       'include_attributes honoured on the rows');
-const sortedEverywhere = single.rows.every((r) =>
-  tokenizer.run(r.expr ?? '').includes('sorted'));
-check(sortedEverywhere, 'every row satisfies the filter');
-console.log(`INFO  billing off the multi_query: `
-            + JSON.stringify(single.billing ?? null));
-console.log(`INFO  top card: ${JSON.stringify({
-  name: first.name, kind: first.kind }, null, 0)}`);
-const cards = collapse(single.rows);
-console.log(`INFO  ${single.rows.length} rows collapse to ${cards.length} cards (D5)`);
+console.log(`INFO  kNN performance: ${JSON.stringify(knnData.performance ?? null)}`);
 
-// 3. §6.6's guarantee through this builder: the narrowest kind (proof method,
-// 832 rows, ~0.06 % selectivity) still fills top_k under ANN.
-const narrow = compileRequest({ query, kinds: ['proof method'] }, tokenizer);
-const narrowGot = await tupf(tupfQueryBody({
-  vector: Array.from(vector), filters: narrow.filters }));
-check(narrowGot.rows.length === RESULT_LIMIT
-      && narrowGot.rows.every((r) => r.kind === 'proof method'),
-      'a ~0.06 %-selective kind filter still fills the 200',
-      `${narrowGot.rows.length} rows, all proof method`);
+// 4. The ANN rank mode under the same tree: accepted, $dist present, and its
+// certificate outcome recorded (an under-fill here is §6.3c's fallback
+// trigger, not a failure of this probe).
+const ann = rowsOf(await tupf(tupfQueryBody({
+  vector: Array.from(vector), filters: compiled.filters, mode: 'ANN' })));
+check(ann.every((r) => typeof r.$dist === 'number'), 'ANN rows carry $dist');
+const annOwed = Math.min(count, RESULT_LIMIT);
+const knnIds = new Set(knn.map((r) => r.id));
+const overlap = ann.filter((r) => knnIds.has(r.id)).length;
+console.log(`INFO  ANN under the same tree: ${ann.length}/${annOwed} owed rows `
+            + `(${certified(ann.length, count) ? 'full' : 'under-filled — the fallback trigger'}), `
+            + `overlap with the kNN top: ${overlap}/${Math.min(knn.length, ann.length)}`);
 
-// 4. excludes(all) = Not(Or(…)): the excluded word appears in none of the three.
-const excl = compileRequest({
+// 5. excludes = Not(Regex) is the exact complement (measured 2026-08-26).
+const excluded = compileRequest({
   query,
-  conditions: [{ on: 'all', polarity: 'excludes', text: 'sorted' }],
-}, tokenizer);
-const exclGot = await tupf(tupfQueryBody({
-  vector: Array.from(vector), filters: excl.filters }));
-const leakage = exclGot.rows.filter((r) =>
-  ['expr', 'name'].some((f) => tokenizer.run(r[f] ?? '').includes('sorted'))
-  || (r.theories ?? []).some((t) => tokenizer.run(t).includes('sorted')));
-check(exclGot.rows.length > 0 && leakage.length === 0,
-      'excludes(all) admits no row carrying the word in any of the three fields',
-      `${exclGot.rows.length} rows, ${leakage.length} leaked`);
+  conditions: [{ on: 'expr', polarity: 'excludes', text: 'sorted' }],
+});
+const complement = countOf(await tupf(tupfCountBody(excluded.filters)));
+const total = countOf(await tupf(
+  { queries: [{ aggregate_by: { n: ['Count', 'id'] } }] }));
+check(count + complement === total,
+      'Not(Regex) counts the exact complement',
+      `${count} + ${complement} = ${count + complement}, namespace holds ${total}`);
+check(Math.abs(total - CONFIGURED.rows) <= CONFIGURED.rows / 100,
+      'wrangler.toml ROWS is within 1 % of the namespace row count',
+      `configured ${CONFIGURED.rows}, counted ${total}`);
+
+// 6. The dialect backstop: a pattern the engine rejects 400s, and the engine's
+// message is where the Worker's engineMessageOf looks for it.
+const bad = await tupfRaw(tupfQueryBody({
+  vector: Array.from(vector), filters: ['expr', 'Regex', '(unclosed'], mode: 'kNN' }));
+let engineLine = bad.text;
+try { engineLine = String(JSON.parse(bad.text).error ?? bad.text); } catch { /* raw */ }
+check(bad.status === 400 && engineLine.length > 0,
+      'a broken pattern 400s with an engine message',
+      `HTTP ${bad.status}: ${engineLine.slice(0, 120)}`);
+
+// 7. The deployed pages, when SITE_URL is set (RELEASE step 10): /about must
+// display exactly the configured ENTITIES and BUILT.
+if (process.env.SITE_URL) {
+  const about = await (await fetch(`${process.env.SITE_URL}/about`)).text();
+  check(about.includes(thin(CONFIGURED.entities)),
+        '/about displays the configured ENTITIES', thin(CONFIGURED.entities));
+  check(about.includes(CONFIGURED.built),
+        '/about displays the configured BUILT', CONFIGURED.built);
+}
 
 process.exit(failures ? 1 : 0);
