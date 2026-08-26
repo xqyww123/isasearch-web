@@ -1083,40 +1083,67 @@ this paragraph with §2's; the paragraph below names those four kinds anyway.)
 
 **How a search works**
 
-> A query is required, because a search is a comparison of meanings. Every
-> entity carries an English explanation (see "About the explanations" below).
-> When the index was built, the embedding model «fireworks/qwen3-embedding-8b»
-> read each explanation and produced its
-> [embedding](https://en.wikipedia.org/wiki/Sentence_embedding): a vector of
-> 4 096 numbers, positioned so that texts with similar meaning lie near each
-> other and unrelated texts lie far apart. When you search, the same model
-> turns your query into a vector of the same kind.
+> Isasearch searches by meaning, not by matching words. It can do this because
+> every entity carries an English explanation (see "About the explanations"
+> below), and because meaning can be turned into geometry: when the index was
+> built, each explanation was placed as a point in a space of 4 096 dimensions —
+> its [embedding](https://en.wikipedia.org/wiki/Sentence_embedding) — so that
+> explanations with similar meaning lie close together and unrelated ones lie
+> far apart. The model that does the placing, «fireworks/qwen3-embedding-8b»,
+> turns your query into a point in the same space when you press search.
 >
-> The search itself is geometry: a
-> [nearest-neighbour search](https://en.wikipedia.org/wiki/Nearest_neighbor_search)
-> for the entities whose vectors lie closest to your query's, closeness being
-> [cosine similarity](https://en.wikipedia.org/wiki/Cosine_similarity) — the
-> number on every card. When your conditions narrow the field far enough,
-> Isasearch computes the similarity to every eligible entity, and the ranking
-> is exact. When the field stays large, scoring «1 230 467» vectors one by one
-> would be too slow, so an
+> Beside the query you may add conditions in the Syntactic Filters panels — a
+> condition such as requiring the name to contain `sorted`. A condition never
+> affects the order; it only decides which entities are eligible. A search shows
+> the 200 eligible entities whose points lie closest to your query's — all of
+> them, when fewer than 200 are eligible. Closeness is the
+> [cosine similarity](https://en.wikipedia.org/wiki/Cosine_similarity) printed
+> on every card: higher means closer; 1 would mean identical, 0 unrelated. That
+> is why a query is required: a condition can only shrink the pool, the query is
+> what orders it, and Isasearch always answers in that order — a dozen eligible
+> entities are still shown nearest-first.
+>
+> The ranking itself is a
+> [nearest-neighbour search](https://en.wikipedia.org/wiki/Nearest_neighbor_search),
+> run in one of two ways. A condition is a plain test of an entity's text, cheap
+> enough to run over every entity, so before ranking anything Isasearch counts
+> exactly how many are eligible; the count decides which way runs, and it
+> returns at the end of this paragraph. When the eligible entities are few
+> enough — roughly, tens of thousands — Isasearch measures the closeness of
+> every one: the ranking is exact. When they are many (with no conditions at
+> all, all «1 230 467» are eligible), measuring each one for every search would
+> be too slow, so an
 > [approximate index](https://en.wikipedia.org/wiki/Nearest_neighbor_search#Approximation_methods)
-> inspects only the most promising regions of the vector space instead — fast,
-> and measured to agree with the exact ranking on all but a few of the 200;
-> when it returns fewer rows than the conditions are known to allow, Isasearch
-> detects that and recomputes exactly.
->
-> The syntactic filters are optional. They decide which entities are eligible
-> to be ordered at all; they do not change the order. Only the best 200 appear.
+> takes over: when the index was built, every point was assigned — knowing
+> nothing of your conditions — to a group of near neighbours, and each group has
+> a centre; the search opens only the groups whose centres lie nearest your
+> query and ranks the eligible entities inside them. The groups are coarse, so
+> an eligible entity can be close to your query while its group as a whole is
+> not; it is then never seen at all. That is the price of the speed. If the
+> approximate search comes back with fewer than 200 results although the
+> eligibility count said at least 200 exist, some were certainly missed, and
+> Isasearch redoes the search the exact way — slow, but rare, and correctness is
+> worth the wait. If it fills all 200, there is no way to tell whether anything
+> was missed: a missed entity's place is taken by a slightly farther one, and no
+> count can reveal the swap. In testing, that error was usually a few entries
+> out of the 200, and a few dozen in the worst of the cases tried.
 
-(§4.5, and §2's deleted paragraph recast; the BM25 paragraph went with the
-checkbox 2026-08-25. **Expanded 2026-08-26 at the user's request** — "建议详细
-讲一下 semantic embedding 与 kNN 的工作原理。最好能链接到 wikipedia" — under
-the delegated editorial authority. The exact/approximate account matches plan
-§6.3c: exact below the routing line, approximate above it with the measured
-overlap, and the under-fill fallback stated as detection-and-recompute. The
-routing line's value is internal and not printed. The links render as links;
-they are the interface's only external references besides source pages.)
+*(Rewritten 2026-08-26 at the user's request ("详细讲一下 semantic embedding 与
+kNN 的工作原理", with Wikipedia links) and then refined through four rounds of
+blind reader testing — two personas per round, an Isabelle researcher with no
+machine-learning background and a software engineer with no Isabelle — until
+both passed: correct answers to comprehension questions and no stumble that
+survives a first read. What the rounds forced, in order: the original opener "A
+query is required" replaced by the meaning-vs-words contrast; one term
+("condition") with a concrete example, introduced before use; the card number
+given its direction and anchors; the eligibility count stated where it is used,
+with its purpose announced; the miss mechanism made concrete (groups with
+centres, built blind to conditions); "measuring each one would be too slow"
+scoped to *every search* so the exact redo is not a contradiction; the
+detection's limit stated honestly — a full 200 hides any miss, and the measured
+error is given with its worst case, not just its typical one. The
+exact/approximate account matches plan §6.3c; the routing line's value stays
+internal ("roughly, tens of thousands" drifts with the corpus and stays true).)*
 
 **How a condition is matched — deleted 2026-08-26.** The user: "现在我们用正则
 表达式了，大家都知道是怎么做的，根本不需要给这些细节" — the site's readers are
