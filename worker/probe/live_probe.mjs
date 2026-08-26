@@ -62,6 +62,16 @@ async function tupf(body) {
   return JSON.parse(text);
 }
 
+// 0. §8.1 step 7's schema acceptance: the three text columns carry regex: true.
+const schema = await (await fetch(
+  `https://${REGION}.turbopuffer.com/v1/namespaces/${NAMESPACE}/schema`,
+  { headers: { 'Authorization': `Bearer ${TPUF_KEY}` } })).json();
+check(['name', 'expr', 'theory'].every((c) => schema?.[c]?.regex === true),
+      'name/expr/theory carry regex: true',
+      JSON.stringify({ name: schema?.name, expr: schema?.expr, theory: schema?.theory }));
+check(!('expr_subtokens' in (schema ?? {})),
+      'the *_subtokens columns are gone');
+
 // 1. The embedding path, template included.
 const query = 'a sorted list stays sorted when an element is appended';
 const vector = await fireworksEmbed(embeddingInput(query), {

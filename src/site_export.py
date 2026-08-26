@@ -1,27 +1,25 @@
 r"""The site export (SEMANTIC_SEARCH_SITE_PLAN.md §8): the semantic DB becomes a
 turbopuffer namespace.
 
-One run does §8.1's steps in their order, and each of the four guards below stops it
+One run does §8.1's steps in their order, and each of the two guards below stops it
 loudly rather than let it publish something wrong:
 
-* **the component guard (D46)** — the asset this machine builds is compared with the
-  committed asset of the previous export, and a changed symbol-file list, a changed
-  `tokenizer_rule` or a changed digest stops the run.  Registering an unrelated
-  Isabelle component moves the asset digest, and the digest names the namespace
-  (§8.2), so without this the export would quietly build a differently-named index;
 * **the completeness gate (§8.1 step 1)** — every shippable record must have a
   vector.  The vector store is a lazy cache and a missing vector is legal in normal
   operation, which is exactly why the export cannot treat it as normal;
-* **the separator probe (§8.1 step 0b)** — one upsert into a test namespace,
-  checking that turbopuffer stores and indexes the whitespace-only element that
-  keeps a `ContainsTokenSequence` from straddling two theory names (§6.3).  It runs
-  on every export rather than once by hand, because §8.2 makes every export a fresh
-  namespace and a wrong separator is only visible as a theory filter that matches a
-  name no theory has;
 * **the fresh-namespace guard (§8.2)** — a namespace that already exists is refused
   unless this run is continuing from its own checkpoint.  turbopuffer cannot drop
   what a batch omits, so an upsert into a live namespace leaves every deleted entity
   behind forever.
+
+(Two more guards stood here until 2026-08-26 and retired with tokenization —
+Q14's final ruling: a condition is a regular expression over the raw displayed
+text, so there is no tokenizer asset for D46's component guard to compare and
+no `theory_subtokens` separator for step 0b's probe to settle.)
+
+The final report prints the three numbers RELEASE.md step 8 pastes into
+`wrangler.toml [vars]` — ROWS, ENTITIES, BUILT — beside `TPUF_NAMESPACE`, in
+the same commit.
 
 Nothing here holds the corpus in memory: records stream out of the store in key
 order and go up in batches, so a re-run resumes where the last one stopped.
@@ -170,18 +168,11 @@ def clean_for_display(expr: str) -> str:
     return expr.replace("\r\n", "\n").replace("\r", "\n")
 
 
-def theory_subtokens(theory: str, tokenize) -> 'list[str]':
-    """§6.3, as of 2026-08-26: the subtokens of the ONE theory a Theory Name
-    condition matches — the theory the entity is written in.
-
-    Empty for the 533 records (0.04 %) with no defining theory, which is how they
-    stop matching every Theory Name condition rather than matching a wrong one.
-    turbopuffer accepts an empty `pre_tokenized_array` and treats it as this
-    intends: never matched by `ContainsTokenSequence`, still returned by its
-    negation, and read back as `[]` rather than as a missing key (probed against a
-    throwaway namespace, 2026-08-26)."""
-    return tokenize(theory) if theory else []
-
+# `theory_subtokens` stood here until the Q14 final ruling: a Theory Name
+# condition is a regular expression over the raw `theory` column now.  The 533
+# records (0.04 %) with no defining theory carry the empty string; how the
+# empty value behaves under `Regex` and `Not(Regex)` is a launch-gate probe of
+# the raw-text overlap sweep (§6.3c), not yet measured.
 
 # The one declaration of the patched column.  `run_patch` (site_source_pages)
 # sends exactly this fragment, so the patch and the export can never diverge on
@@ -190,44 +181,40 @@ def theory_subtokens(theory: str, tokenize) -> 'list[str]':
 SOURCE_LINK_SCHEMA = {"type": "string", "filterable": False}
 
 
+# The three text columns a condition can name.  One declaration (D23's spirit
+# survives tokenization: the same shape for all three, so one pattern means one
+# thing wherever it is aimed).  `{"type": "string", "regex": True}` is the
+# measured spelling — the schema every 2026-08-26 probe namespace was built
+# with; the 4 KiB filterable-value limit does not apply to regex columns
+# (measured, Q14).
+REGEX_COLUMN = {"type": "string", "regex": True}
+
+
 # §6.1, in its order.  The schema and the document builder below are two halves of
 # one statement and must be read together.
 def namespace_schema(dimension: int) -> dict:
-    pre_tokenized = {"type": "[]string",
-                     "full_text_search": {"tokenizer": "pre_tokenized_array",
-                                          "case_sensitive": True,
-                                          "stemming": False,
-                                          "remove_stopwords": False}}
     return {
         "id": "uuid",
         "vector": {"type": f"[{dimension}]f16", "ann": True},
-        # display
         "key": {"type": "string", "filterable": False},
-        "name": {"type": "string", "filterable": False},
-        "expr": {"type": "string", "filterable": False},
-        # The theory the entity is WRITTEN IN, one per record, empty when unknown.
-        # Scalar since 2026-08-26; `theories` was a list because a theorem carried
-        # its constituent theories here instead, which is the sense the split below
-        # moved to its own column.  Its shape now matches the other two filtered
-        # fields: `name`/`name_subtokens`, `expr`/`expr_subtokens`,
-        # `theory`/`theory_subtokens`.
-        "theory": {"type": "string", "filterable": False},
+        # Display AND matching: since Q14's final ruling a condition is a
+        # regular expression over the raw displayed text, so the three text
+        # columns carry the regex index themselves and the `*_subtokens`
+        # shadows (with the tokenizer that filled them) are gone.  `theory` is
+        # the ONE theory the entity is written in, empty when unknown.
+        "name": REGEX_COLUMN,
+        "expr": REGEX_COLUMN,
+        "theory": REGEX_COLUMN,
         # Display only, and only a theorem-alike record has any: the theories
-        # declaring the constants its statement uses.  No full-text index — no
-        # condition reaches it (D14 as superseded), it is read only when an entity
-        # page renders.  Sorted, because turbopuffer preserves insertion order
+        # declaring the constants its statement uses.  No index — no condition
+        # reaches it (D14 as superseded), it is read only when an entity page
+        # renders.  Sorted, because turbopuffer preserves insertion order
         # verbatim, so what is written here IS the order the chips appear in.
         "constituent_theories": {"type": "[]string", "filterable": False},
         "kind": {"type": "string", "filterable": True},
         "position": {"type": "string", "filterable": False},
         "source_link": SOURCE_LINK_SCHEMA,
         "from_collection": {"type": "string", "filterable": False},
-        # filtering — one declaration for all three, which is D23: the `All` panel
-        # Ors one typed string across them, so a field that tokenised differently
-        # would make the same string mean different things inside one condition.
-        "expr_subtokens": pre_tokenized,
-        "name_subtokens": pre_tokenized,
-        "theory_subtokens": pre_tokenized,
         # Display only since 2026-08-26.  It carried a full-text index — case
         # folded, stemmed, stopwords removed — for one reader: the BM25 leg of the
         # hybrid ranking, dropped 2026-08-25 when the user measured the hybrid as
@@ -238,14 +225,14 @@ def namespace_schema(dimension: int) -> dict:
 
 
 def build_document(key: bytes, rec, theory: str, constituents: 'list[str]',
-                   vector: np.ndarray, tokenize, source_link: str) -> dict:
+                   vector: np.ndarray, source_link: str) -> dict:
     """§8.1 steps 2 to 5 for one record.
 
-    `name_subtokens` comes from the raw `name` and never from the displayed form: a
-    member of a dynamic fact collection is displayed as `<from_collection>(_)`, but
-    the Worker emits one filter for the whole namespace and cannot route a member row
-    to a different field, so a pasted `coll(_)` matches nothing — intended, and ruled
-    on 2026-08-19 (§8.1 step 5).
+    A condition matches the raw `name`, never the displayed form: a member of a
+    dynamic fact collection is displayed as `<from_collection>(_)`, but the
+    Worker emits one filter for the whole namespace and cannot route a member
+    row to a different field, so a pasted `coll(_)` matches nothing — intended,
+    and ruled on 2026-08-19 (§8.1 step 5).
 
     `theory` is the one theory the entity is written in — `defining_theory_of`
     below — and `constituents` the theories declaring the constants a statement
@@ -257,15 +244,13 @@ def build_document(key: bytes, rec, theory: str, constituents: 'list[str]',
     artefact by `site_source_pages.source_links`; the empty string is D42's
     absent form.  Resolution happened once, at map time (D49 ruling 2) — the
     export only carries the string."""
-    name = rec.name or ""
-    expr = rec.expr or ""
     return {
         "id": document_id(key),
         "vector": base64.b64encode(
             vector.astype("<f4", copy=False).tobytes()).decode("ascii"),
         "key": base64.urlsafe_b64encode(key).decode("ascii"),
-        "name": name,
-        "expr": clean_for_display(expr),
+        "name": rec.name or "",
+        "expr": clean_for_display(rec.expr or ""),
         "theory": theory,
         # Sorted here and nowhere else: turbopuffer stores an array in the order
         # given, so this call is what fixes the order of the entity page's chips.
@@ -274,9 +259,6 @@ def build_document(key: bytes, rec, theory: str, constituents: 'list[str]',
         "position": (f"{rec.position[0]}:{rec.position[1]}" if rec.position else ""),
         "source_link": source_link,
         "from_collection": rec.from_collection or "",
-        "expr_subtokens": tokenize(expr),
-        "name_subtokens": tokenize(name),
-        "theory_subtokens": theory_subtokens(theory, tokenize),
         "interpretation": rec.interpretation or "",
     }
 
@@ -456,148 +438,17 @@ def completeness_gate(get_vector) -> int:
 
 
 # ---------------------------------------------------------------------------
-# §8.1 step 6 and §8.2 — the asset, the component guard, the namespace name
+# §8.2 — the namespace name
 # ---------------------------------------------------------------------------
-
-def tokenizer_dir() -> str:
-    """`site/tokenizer/`, which since 2026-08-26 holds the whole tokenizer: both
-    implementations, the asset they read, the frozen inputs and digest that hold them
-    to each other, and the two drivers that check them.  They lived in the
-    `Isabelle_Semantic_Embedding` package until the 2026-08-24 repository split left
-    the gate's two halves in different checkouts, unable to find one another; the site
-    is their only consumer, so they came here."""
-    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        "site", "tokenizer")
-
-
-def _import_from_tokenizer_dir(name: str):
-    """Import a module out of `site/tokenizer/` without making that directory a
-    package.  It is not one on purpose: the CI gate loads the same files with neither
-    Isabelle nor this repository installed (§16.6), so nothing there may depend on an
-    import root."""
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        name, os.path.join(tokenizer_dir(), f"{name}.py"))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def committed_asset_path() -> str:
-    """Where the previous export's asset is, which is also where the CI gate and the
-    JavaScript port read theirs (§16.6).  One file, so the invariant that makes the
-    comparison meaningful — the committed asset is the deployed asset — needs no
-    second declaration to keep in step."""
-    return os.path.join(tokenizer_dir(), "asset.json")
-
-
-def asset_differences(committed_text: str, asset: dict, digest: str) -> 'list[str]':
-    """The three counts D46's guard compares, in words: the `ISABELLE_SYMBOLS` file
-    list, the `tokenizer_rule` version and the digest.
-
-    All three, not the digest alone: the digest catches a table change but says
-    nothing about *what* changed, and the file list is the thing D46 names as the
-    declaration.  The `tokenizer_rule` comparison is what sees a rule change at all —
-    a rule that touches no table leaves the other two untouched."""
-    committed = json.loads(committed_text)
-    committed_digest = hashlib.sha256(committed_text.encode("utf-8")).hexdigest()
-    changes = []
-    if committed.get("symbol_files") != asset["symbol_files"]:
-        changes.append("the symbol files changed:\n"
-                       f"  committed {json.dumps(committed.get('symbol_files'))}\n"
-                       f"  this run  {json.dumps(asset['symbol_files'])}")
-    if committed.get("tokenizer_rule") != asset["tokenizer_rule"]:
-        changes.append(f"tokenizer_rule went from {committed.get('tokenizer_rule')!r} "
-                       f"to {asset['tokenizer_rule']!r}")
-    if committed_digest != digest:
-        changes.append(f"the asset digest went from {committed_digest[:12]} to "
-                       f"{digest[:12]}")
-    return changes
-
-
-def emit_asset(path: str, *, change_intended: bool) -> 'tuple[dict, str, str]':
-    """§8.1 step 6 and D46's guard.  Returns `(asset, text, sha256)`, and does NOT
-    write: the committed asset is the *deployed* asset, so it is replaced only once
-    the namespace it names exists (`commit_asset`).
-
-    Builds the asset from this installation's symbol table and compares it with the
-    committed one on three counts: the `ISABELLE_SYMBOLS` file list, the
-    `tokenizer_rule` version and the digest.  Any of the three moving means the
-    namespace name moves (§8.2), so an unannounced change stops the export instead of
-    quietly building a differently-named index — registering an unrelated Isabelle
-    component is exactly that case, and changes not one published document.
-
-    The `tokenizer_rule` comparison is the one that catches a rule change: a rule
-    that touches no table leaves the file list and the digest alone."""
-    tokenizer_asset = _import_from_tokenizer_dir("tokenizer_asset")
-    asset = tokenizer_asset.build_asset()
-    text = tokenizer_asset.serialize(asset)
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-    if not os.path.isdir(os.path.dirname(path)):
-        raise ExportError(
-            f"{os.path.dirname(path)} does not exist, so there is nowhere to compare "
-            f"this export's asset against the last one's (D46); pass "
-            f"--committed-asset to say where it lives")
-    if os.path.exists(path):
-        with open(path, encoding="utf-8") as f:
-            changes = asset_differences(f.read(), asset, digest)
-        if changes and not change_intended:
-            raise ExportError(
-                "this export's tokenizer asset is not the committed one (D46):\n  "
-                + "\n  ".join(changes)
-                + "\nIf only `symbol_files` differs, the tables are unchanged and "
-                  "the tokenizer behaves identically — refresh the committed asset "
-                  "with site/tokenizer/build_inputs.py and emit.py --update. "
-                  "Otherwise a rule or a table moved, and the Worker's copy of the "
-                  "asset has to be redeployed with the index (§8.2). Re-run with "
-                  "--asset-change-intended once you know which it is.")
-        if changes:
-            _log("the asset changed and the change was declared intended:")
-            for change in changes:
-                _log("  " + change.replace("\n", "\n  "))
-    else:
-        _log(f"no committed asset at {path}: this export writes the baseline")
-
-    return asset, text, digest
-
-
-# The companion namespace that names the asset a data namespace was built under
-# (§8.2, ruled 2026-08-25).  One row; the Worker reads it once per instance and
-# refuses to serve when the digest is not its own asset's.  It is a namespace of
-# its own because every turbopuffer row must carry a vector, so a sentinel row
-# inside the data namespace would be an ANN candidate.  The `.asset` suffix can
-# never collide with a `-N` generation name, and the two are retired together.
-ASSET_NAMESPACE_SUFFIX = ".asset"
-ASSET_SENTINEL_ID = str(uuid.UUID(bytes=_hash128(b"isasearch tokenizer asset")))
-
-
-def asset_namespace(namespace: str) -> str:
-    return namespace + ASSET_NAMESPACE_SUFFIX
-
-
-def write_asset_sentinel(namespace: str, asset: dict, digest: str, *,
-                         entities: int, built: str, region: str, key: str) -> None:
-    """Write (or overwrite) the companion namespace's single row.  Besides the
-    asset digest it carries what the landing page prints (ruled 2026-08-25):
-    the entity count under the golden standard and the build date, so a
-    republish is one export and one `TPUF_NAMESPACE` edit, nothing counted by
-    hand."""
-    request("POST", f"/v2/namespaces/{asset_namespace(namespace)}", {
-        "distance_metric": "cosine_distance",
-        "schema": {"id": "uuid",
-                   "vector": {"type": "[2]f32", "ann": True},
-                   "digest": {"type": "string", "filterable": False},
-                   "tokenizer_rule": {"type": "int", "filterable": False},
-                   "entities": {"type": "int", "filterable": False},
-                   "built": {"type": "string", "filterable": False}},
-        "upsert_rows": [{"id": ASSET_SENTINEL_ID, "vector": [1.0, 0.0],
-                         "digest": digest,
-                         "tokenizer_rule": asset["tokenizer_rule"],
-                         "entities": entities, "built": built}],
-    }, region=region, key=key)
-    _log(f"{asset_namespace(namespace)}: asset digest {digest[:12]}, "
-         f"{entities} entities, built {built} recorded")
+# The tokenizer asset, D46's component guard and the `.asset` sentinel
+# namespace all stood here until 2026-08-26.  The asset fed the tokenizer
+# (retired with tokenization, Q14) and the guard existed because the asset's
+# rules had to match the index's — a failure class that no longer exists.  The
+# sentinel carried the display numbers and cost a cross-ocean turbopuffer read
+# per cold-isolate page view; ROWS/ENTITIES/BUILT live in `wrangler.toml
+# [vars]` now, kept honest by RELEASE.md's checklist (§8.2).  The 489-entry
+# `\<symbol>` table the condition box replaces with was extracted once from
+# the retiring asset into `site/app/public/symbols.json`.
 
 
 # D5 as amended 2026-08-25 (the user's golden standard): two records are one
@@ -606,20 +457,6 @@ def write_asset_sentinel(namespace: str, asset: dict, digest: str, *,
 def entity_of(key: bytes) -> bytes:
     from Isabelle_RPC_Host.universal_key import is_thm_rule_key
     return key[:16] + b"\x00" + key[17:] if is_thm_rule_key(key) else key
-
-
-def count_entities(sessions, registry) -> int:
-    """The landing page's number: distinct entities among the shippable records."""
-    counts: 'dict[str, int]' = dict.fromkeys(
-        ("records", "undecodable", "wip", "experience", "out of scope"), 0)
-    return len({entity_of(key)
-                for key, _rec, _th in iter_shippable(sessions, registry, counts)})
-
-
-def commit_asset(path: str, text: str) -> None:
-    """Record this export's asset as the one the next export compares against."""
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
 
 
 def namespace_base(isabelle_home: str, afp_dir: str) -> str:
@@ -816,7 +653,7 @@ def iter_shippable(sessions, registry, counts) -> 'Iterator[tuple[bytes, object,
         yield key, rec, theories
 
 
-def iter_documents(sessions, registry, get_vector, tokenize, counts,
+def iter_documents(sessions, registry, get_vector, counts,
                    source_links: 'dict[str, str] | None',
                    positioned: 'dict[str, str]',
                    by_base: 'dict[str, list[str]]') -> 'Iterator[tuple[bytes, dict]]':
@@ -854,8 +691,7 @@ def iter_documents(sessions, registry, get_vector, tokenize, counts,
         # else `dependencies` is the single declaring theory, which `theory`
         # already carries and the entity page says in a sentence instead.
         constituents = dependencies if is_xor_prefixed_key(key) else []
-        yield key, build_document(key, rec, theory, constituents, vector,
-                                  tokenize, link)
+        yield key, build_document(key, rec, theory, constituents, vector, link)
 
 
 def _batches(documents, rows: int, size: int):
@@ -921,22 +757,20 @@ def _write_checkpoint(path: str, namespace: str, last: bytes, done: int,
     os.replace(tmp, path)
 
 
-def run(*, isabelle_home: str, afp_dir: str, committed_asset: str,
+def run(*, isabelle_home: str, afp_dir: str,
         vector_store: 'str | None', region: str, dump: 'str | None',
-        checkpoint: str, limit: 'int | None', change_intended: bool,
+        checkpoint: str, limit: 'int | None',
         skip_gate: bool, name_override: 'str | None' = None,
         source_links_path: 'str | None' = None,
         no_source_links: bool = False) -> str:
     """§8.1 end to end.  Returns the namespace that was written."""
     import contextlib
-    isabelle_tokenizer = _import_from_tokenizer_dir("isabelle_tokenizer")
 
-    # The artefact is resolved FIRST — a pure local read, before the asset
-    # comparison, the API key, the separator probe's live upsert and the
-    # namespace listing — because a missing artefact is an argument error and
-    # must not cost a billed write (the A3/B5 ruling: a re-export without it
-    # would erase the patched source_link column on every row; shipping
-    # without links takes the explicit --no-source-links).
+    # The artefact is resolved FIRST — a pure local read, before the API key
+    # and the namespace listing — because a missing artefact is an argument
+    # error and must not cost a billed write (the A3/B5 ruling: a re-export
+    # without it would erase the patched source_link column on every row;
+    # shipping without links takes the explicit --no-source-links).
     if source_links_path and no_source_links:
         raise ExportError(
             "--source-links and --no-source-links contradict each other; "
@@ -968,10 +802,6 @@ def run(*, isabelle_home: str, afp_dir: str, committed_asset: str,
             "source_link column on every row (§17.6).  Pass the artefact, or "
             "--no-source-links to ship without links on purpose.")
 
-    asset, text, digest = emit_asset(committed_asset,
-                                     change_intended=change_intended)
-    _log(f"asset {digest[:12]} (tokenizer_rule {asset['tokenizer_rule']})")
-
     key = None if dump else api_key()
 
     base = namespace_base(isabelle_home, afp_dir)
@@ -993,7 +823,6 @@ def run(*, isabelle_home: str, afp_dir: str, committed_asset: str,
 
     sessions = declared_sessions(isabelle_home, afp_dir)
     _log(f"{len(sessions)} declared session(s) in scope (D24)")
-    tokenize = isabelle_tokenizer.Tokenizer(asset)
     registry = theory_registry()
     _log(f"{len(registry)} theory-hash registry entr(ies)")
 
@@ -1012,7 +841,7 @@ def run(*, isabelle_home: str, afp_dir: str, committed_asset: str,
              "exported", "no defining theory"), 0)
         entities: 'set[bytes]' = set()
         documents = ((k, d) for k, d in iter_documents(
-            sessions, registry, get_vector, tokenize, counts, source_links,
+            sessions, registry, get_vector, counts, source_links,
             positioned, by_base)
             if entities.add(entity_of(k)) is None)
         if resume_after is not None:
@@ -1051,16 +880,19 @@ def run(*, isabelle_home: str, afp_dir: str, committed_asset: str,
                          f"{rate:.0f}/s")
             _log(f"upserted {done} document(s) into {namespace}")
 
-    if not dump and not limit:
-        # The committed asset declares what is DEPLOYED (D46), so only a run that
-        # deployed the whole corpus may move it — and only such a run names the
-        # asset its namespace answers to.
-        write_asset_sentinel(namespace, asset, digest, entities=len(entities),
-                             built=time.strftime("%Y-%m-%d", time.gmtime()),
-                             region=region, key=key)
-        commit_asset(committed_asset, text)
     for what, n in counts.items():
         _log(f"  {what:<14} {n}")
+    if not dump and not limit:
+        # §8.1's final report: what RELEASE.md step 8 pastes into wrangler.toml
+        # [vars], in the same commit as TPUF_NAMESPACE.  ROWS is the record
+        # count (§6.3c's denominator); ENTITIES is the D5-collapsed display
+        # number; step 10's probe asserts the deployed pages agree.
+        built = time.strftime("%Y-%m-%d", time.gmtime())
+        _log("REPORT — paste into worker/wrangler.toml [vars] (RELEASE step 8):")
+        _log(f'  TPUF_NAMESPACE = "{namespace}"')
+        _log(f'  ROWS = "{done}"')
+        _log(f'  ENTITIES = "{len(entities)}"')
+        _log(f'  BUILT = "{built}"')
     return namespace
 
 
@@ -1088,8 +920,6 @@ def build_parser(**kw) -> argparse.ArgumentParser:
         **kw)
     p.add_argument("--isabelle-home", help="the distribution tree (default: $ISABELLE_HOME)")
     p.add_argument("--afp", help="the AFP snapshot tree (default: the parent of $AFP)")
-    p.add_argument("--committed-asset", default=committed_asset_path(),
-                   help="the previous export's asset, which D46 compares against")
     p.add_argument("--vector-store", help="the vector store to publish from")
     p.add_argument("--source-links", metavar="ARTEFACT",
                    help="§17's artefact; each row's source_link is composed "
@@ -1108,54 +938,24 @@ def build_parser(**kw) -> argparse.ArgumentParser:
                    help="where to record upsert progress, so a re-run continues "
                         "instead of starting over")
     p.add_argument("--limit", type=int, help="stop after this many documents")
-    p.add_argument("--asset-change-intended", action="store_true",
-                   help="accept an asset that differs from the committed one (D46)")
     p.add_argument("--skip-completeness-gate", action="store_true",
                    help="do not check that every shippable record has a vector; "
                         "for a --limit run, never for a real export")
-    p.add_argument("--built", metavar="YYYY-MM-DD",
-                   help="with --asset-sentinel-only: the build date to record")
-    p.add_argument("--asset-sentinel-only", action="store_true",
-                   help="write only the companion `.asset` namespace for "
-                        "--namespace, from the committed asset; for a namespace "
-                        "exported before the sentinel existed")
     return p
-
-
-def write_sentinel_from_committed(namespace: str, committed_asset: str, *,
-                                  built: str, region: str) -> None:
-    """The one-off for a namespace that predates the sentinel or its fields: the
-    committed asset IS what that namespace was built under (D46's invariant), so
-    its digest is what the sentinel must say; the entity count is taken from the
-    store, which must be the generation the namespace was exported from; the
-    build date is given, since a re-stamp is not a rebuild."""
-    with open(committed_asset, encoding="utf-8") as f:
-        text = f.read()
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    home, afp = _default_trees()
-    entities = count_entities(declared_sessions(home, afp), theory_registry())
-    write_asset_sentinel(namespace, json.loads(text), digest, entities=entities,
-                         built=built, region=region, key=api_key())
 
 
 def run_from_args(args: argparse.Namespace) -> int:
     """The body both entry points share: locate the trees, run, report a failure."""
     try:
-        if args.asset_sentinel_only:
-            if not (args.namespace and args.built):
-                raise ExportError("--asset-sentinel-only needs --namespace and --built")
-            write_sentinel_from_committed(args.namespace, args.committed_asset,
-                                          built=args.built, region=args.region)
-            return 0
         home, afp = args.isabelle_home, args.afp
         if not (home and afp):
             found_home, found_afp = _default_trees()
             home, afp = home or found_home, afp or found_afp
         run(isabelle_home=home, afp_dir=afp,
-            committed_asset=args.committed_asset, vector_store=args.vector_store,
+            vector_store=args.vector_store,
             region=args.region, dump=args.dump,
             checkpoint=args.checkpoint,
-            limit=args.limit, change_intended=args.asset_change_intended,
+            limit=args.limit,
             skip_gate=args.skip_completeness_gate, name_override=args.namespace,
             source_links_path=args.source_links,
             no_source_links=args.no_source_links)

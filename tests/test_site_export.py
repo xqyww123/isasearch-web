@@ -4,8 +4,6 @@ be tested without the database, the Isabelle installation or the network.
 What is left to a run against the real store — the scope census, the completeness
 gate — is recorded in §8.1 beside each step.
 """
-import json
-import os
 from types import SimpleNamespace
 
 import pytest
@@ -88,17 +86,8 @@ def test_display_cleaning_normalises_line_endings():
     assert se.clean_for_display("a\r\nb\rc") == "a\nb\nc"
 
 
-# --- §6.3's one theory name -------------------------------------------------
-
-def test_the_theory_subtokens_are_the_one_theorys():
-    assert se.theory_subtokens("HOL.List", lambda s: s.split(".")) == ["HOL", "List"]
-
-
-def test_no_defining_theory_gives_an_empty_token_list():
-    """Which is how the 533 records that have none match no Theory Name condition,
-    rather than matching a wrong one.  turbopuffer stores `[]` and never matches it
-    with `ContainsTokenSequence` (probed 2026-08-26)."""
-    assert se.theory_subtokens("", lambda s: s.split(".")) == []
+# The two `theory_subtokens` cases were deleted 2026-08-26 with the function:
+# a Theory Name condition is a regular expression over the raw `theory` column.
 
 
 # --- §7's defining theory ---------------------------------------------------
@@ -188,44 +177,8 @@ def test_a_namespace_that_only_shares_the_prefix_does_not_spend_a_generation(mon
     assert se.next_namespace("isasearch-x", region="r", key="k") == "isasearch-x"
 
 
-# --- D46's guard ------------------------------------------------------------
-
-_ASSET = {"tokenizer_rule": 1, "symbol_files": [{"name": "etc/symbols", "sha256": "ab"}]}
-
-
-def _committed(asset):
-    from site_export import _import_from_tokenizer_dir
-    text = _import_from_tokenizer_dir("tokenizer_asset").serialize(asset)
-    import hashlib
-    return text, hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def test_an_unchanged_asset_is_no_change():
-    text, digest = _committed(_ASSET)
-    assert se.asset_differences(text, _ASSET, digest) == []
-
-
-def test_registering_a_component_is_a_loud_failure_and_not_a_new_namespace():
-    """D46: the asset carries the export machine's whole symbol table, so an extra
-    component moves the digest and therefore the namespace, though not one published
-    document changes."""
-    text, _ = _committed(_ASSET)
-    changed = dict(_ASSET, symbol_files=_ASSET["symbol_files"]
-                   + [{"name": "phi-system/symbols", "sha256": "cd"}])
-    _, digest = _committed(changed)
-    changes = se.asset_differences(text, changed, digest)
-    assert len(changes) == 2 and "symbol files" in changes[0]
-
-
-def test_a_rule_change_that_touches_no_table_is_still_seen():
-    """The case `tokenizer_rule` exists for: §5.2's numeric class reuses the digit set
-    the asset already ships, so without the version the digest would not move and
-    'write into a new namespace' would become an upsert into the live one."""
-    text, _ = _committed(_ASSET)
-    bumped = dict(_ASSET, tokenizer_rule=2)
-    _, digest = _committed(bumped)
-    changes = se.asset_differences(text, bumped, digest)
-    assert any("tokenizer_rule" in c for c in changes)
+# D46's three guard cases were deleted 2026-08-26 with the guard itself: the
+# tokenizer asset it compared retired with tokenization (Q14's final ruling).
 
 
 # --- §8.1 steps 2 to 5, on one record ---------------------------------------
@@ -247,25 +200,21 @@ def _vector():
     return np.zeros(4, dtype="float32")
 
 
-def _split(s):
-    return s.replace(".", " ").split()
-
-
 def test_a_document_carries_exactly_the_fields_the_schema_declares():
     """Two halves of one statement: a field in one and not the other is either an
     attribute turbopuffer types by guesswork or a column nothing ever fills."""
-    doc = se.build_document(b"k", _record(), "HOL.List", [], _vector(), _split, "")
+    doc = se.build_document(b"k", _record(), "HOL.List", [], _vector(), "")
     assert set(doc) == set(se.namespace_schema(4))
 
 
 def test_the_position_is_a_symbolic_path_and_a_line():
-    doc = se.build_document(b"k", _record(), "HOL.List", [], _vector(), _split, "")
+    doc = se.build_document(b"k", _record(), "HOL.List", [], _vector(), "")
     assert doc["position"] == "$AFP/Q/J.thy:42"
 
 
 def test_a_record_without_a_position_says_so_with_an_empty_string():
     doc = se.build_document(b"k", _record(position=None), "HOL.List", [],
-                            _vector(), _split, "")
+                            _vector(), "")
     assert doc["position"] == ""
 
 
@@ -274,20 +223,20 @@ def test_the_source_link_is_carried_verbatim():
     only carries the composed string; the empty string is D42's absent form.
     A document id the artefact does not name raises in `iter_documents`
     instead of shipping silently empty (the A3/B5 ruling)."""
-    doc = se.build_document(b"k", _record(), "HOL.List", [], _vector(), _split,
+    doc = se.build_document(b"k", _record(), "HOL.List", [], _vector(),
                             "/source/HOL.List.html#L92")
     assert doc["source_link"] == "/source/HOL.List.html#L92"
-    doc = se.build_document(b"k", _record(), "HOL.List", [], _vector(), _split, "")
+    doc = se.build_document(b"k", _record(), "HOL.List", [], _vector(), "")
     assert doc["source_link"] == ""
 
 
-def test_a_collection_member_is_indexed_under_its_raw_name():
+def test_a_collection_member_is_matched_under_its_raw_name():
     """§8.1 step 5: `from_collection` is a display attribute, and the Worker emits one
     filter for the whole namespace, so a pasted `coll(_)` matches nothing — which the
-    user ruled intended on 2026-08-19."""
+    user ruled intended on 2026-08-19.  The regex column holds the raw name."""
     doc = se.build_document(b"k", _record(name="Foo.bar_1", from_collection="Foo.bars"),
-                            "HOL.List", [], _vector(), _split, "")
-    assert doc["name_subtokens"] == _split("Foo.bar_1")
+                            "HOL.List", [], _vector(), "")
+    assert doc["name"] == "Foo.bar_1"
     assert doc["from_collection"] == "Foo.bars"
 
 
@@ -297,7 +246,7 @@ def test_the_vector_goes_up_as_little_endian_float32():
     import base64
     import numpy as np
     doc = se.build_document(b"k", _record(), "HOL.List", [],
-                            np.array([1.0, 2.0, 3.0, 4.0], dtype="float32"), _split, "")
+                            np.array([1.0, 2.0, 3.0, 4.0], dtype="float32"), "")
     back = np.frombuffer(base64.b64decode(doc["vector"]), dtype="<f4")
     assert list(back) == [1.0, 2.0, 3.0, 4.0]
 
@@ -398,9 +347,9 @@ def test_a_group_checkpoints_on_its_last_batch_and_not_on_any_earlier_one():
 
 def test_the_export_refuses_the_contradictory_source_link_flags():
     with pytest.raises(se.ExportError, match="contradict"):
-        se.run(isabelle_home="", afp_dir="", committed_asset="",
+        se.run(isabelle_home="", afp_dir="",
                vector_store=None, region="", dump=None, checkpoint="",
-               limit=None, change_intended=False, skip_gate=True,
+               limit=None, skip_gate=True,
                source_links_path="x.json", no_source_links=True)
 
 
@@ -414,8 +363,8 @@ def test_the_artefact_is_resolved_before_any_network_action(tmp_path,
     monkeypatch.setattr(se, "api_key", _bomb)
     import site_source_pages as ssp
     with pytest.raises((ssp.SourcePagesError, OSError)):
-        se.run(isabelle_home="", afp_dir="", committed_asset="",
+        se.run(isabelle_home="", afp_dir="",
                vector_store=None, region="", dump=None, checkpoint="",
-               limit=None, change_intended=False, skip_gate=True,
+               limit=None, skip_gate=True,
                source_links_path=str(tmp_path / "missing.json"),
                no_source_links=False)

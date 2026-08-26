@@ -104,8 +104,10 @@ and the about page name them, and a first-time visitor does not need the
 distinction here.)*
 
 The count is a substitution slot, filled by the export and matching the footer's
-build date: the export writes both into the asset sentinel row, and the Worker
-reads them there (ruled 2026-08-25). It is exact, not rounded, and it counts
+build date: the export prints both in its final report, RELEASE step 8 pastes
+them into `wrangler.toml [vars]`, and the Worker reads them there (the sentinel
+row that used to carry them was deleted 2026-08-26, §8.2 of the plan). It is
+exact, not rounded, and it counts
 **entities under the user's golden standard of 2026-08-25** (plan D5 as
 amended): theorem-alike records whose universal keys differ only in the kind
 tag are one entity. The live index holds 1 337 009 records and 1 230 467
@@ -125,7 +127,7 @@ Under the search box, one paragraph:
 > Syntactic Filter below to narrow the results.
 
 The three values in the first paragraph — the release, the snapshot and the
-entity count — are substitution slots, filled from the asset sentinel row and
+entity count — are substitution slots, filled from the deployed `[vars]` and
 the namespace name.
 
 *(The user's own sentences, 2026-08-25. The word **syntactic** is what carries
@@ -1000,8 +1002,10 @@ wording locked elsewhere in this file (named beside each); the sentences marked
 | Embedding model | «fireworks/qwen3-embedding-8b» |
 
 All five are substitution slots; none is written by hand. The first four come
-from the asset sentinel row and the namespace name, the model from the value the
-Worker actually calls, so the page cannot name a model the site does not use.
+from the deployed `[vars]` and the namespace name (pasted from the export's
+final report by RELEASE step 8, asserted by step 10's probe), the model from
+the value the Worker actually calls, so the page cannot name a model the site
+does not use.
 The model is printed as that value reads, provider prefix included — a
 hand-kept "display name" table would be one more thing that can drift, and the
 prefix answers a question a reader has anyway, which is where a query goes.

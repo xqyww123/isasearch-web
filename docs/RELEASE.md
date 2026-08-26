@@ -58,28 +58,31 @@ prefix the live site is serving**; **step 11 deletes namespaces permanently**.
 [ ]  0  right host, toolchain, ~5 GB free, DB quiet, keys set (all six), tree clean,
         tests green; RECORD the deployed version, the current TPUF_NAMESPACE,
         and the previous published-tree directory; schema change?
-        tokenizer change? (if tokenizer: all four gate commands pass,
-        tokenizer_rule bumped, --asset-change-intended ready)
+        (a schema change is never a code-only release)
 [ ]  1  scan                       ~30 s
 [ ]  2  map                        ~8 s      → RECORD the content hash
 [ ]  3  publish -> published.<date>          → KEEP the previous tree until the
                                                NEXT release: source-page rollback
 [ ]  4  gate (tree)                          → three counters unchanged, or STOP
 [ ]  5  rclone COPY (never sync here) → check --one-way = 0 differences
-[ ]  6  site export, detached + tee ~3 h 36 m+ → RECORD the namespace
+[ ]  6  site export, detached + tee ~3 h 36 m+ → RECORD the namespace AND the
+        final REPORT block (ROWS / ENTITIES / BUILT)
         (may overlap 3-5; step 5 must be done before step 8)
 [ ]  7  gate --namespace --sample 1000       → exit 0
-[ ]  8  wrangler.toml TPUF_NAMESPACE, commit (+ the asset, if it moved),
-        wrangler deploy                                            (human)
-        → only after 6 finished, or every search 502s
+[ ] 7b  the raw-text overlap sweep (the LAUNCH GATE, §6.3c) against the new
+        namespace → overlap ≥ the 3 % line's margin, deadlines confirmed
+[ ]  8  wrangler.toml: TPUF_NAMESPACE + ROWS + ENTITIES + BUILT, all four from
+        step 6's REPORT, ONE commit; wrangler deploy                (human)
+        → only after 6 finished, or searches serve a half-loaded index
         → then curl /api/search: 200 before you purge anything
 [ ]  9  purge the zone cache (whole zone - conda.qiyuan.me too),
         confirm MISS->HIT                                          (human)
 [ ] 10  live acceptance, AFTER the purge: /, /about, an entity page,
         a source link, CoreC++, the rate limit, live_probe.mjs
 [ ] 11  IRREVERSIBLE. delete by NAME, never by generation number: everything
-        older than the two you keep, plus any data namespace with no .asset
-        companion; guards in the script, second person confirms. Then prune
+        older than the two you keep, plus abandoned runs (the release log names
+        the real generations) and the legacy .asset companions of retired
+        namespaces; guards in the script, second person confirms. Then prune
         R2 (sync, read the deletions, purge again - human), drop the tree two
         releases old, copy artefacts into pipeline/, commit, append to the
         release log (namespace, artefact hash, Worker version, COMMIT SHA,
@@ -144,19 +147,19 @@ on, restated so the steps can be read on their own.
 - **The site export** — the batch job that turns the semantic DB into a turbopuffer
   namespace. Never call it "publish"; in this repository `publish` is the
   source-tree step above.
-- **The asset** — `site/tokenizer/asset.json`: the one file pinning the tokenizer's
-  character classes, tables, and its `tokenizer_rule` version number. The two
-  two tokenizer implementations — `site/tokenizer/isabelle_tokenizer.py` and
-  `site/tokenizer/isabelle_tokenizer.js`, side by side — both read it, which is what keeps stored text and typed queries tokenised alike.
-- **The sentinel row** — one row in the companion namespace `<namespace>.asset`,
-  carrying the asset's SHA-256 and `tokenizer_rule`, and the entity count and build
-  date the pages print.
-  The Worker compares that digest with its own bundled asset and refuses to answer
-  any search while the two differ (§8.2).
+- **The tokenizer, the asset and the sentinel — retired 2026-08-26.** Conditions
+  are regular expressions over the raw text columns (plan §13 Q14), so there is no
+  tokenizer, no `site/tokenizer/asset.json`, no D46 component guard and no
+  `<namespace>.asset` companion. What the pages print — the entity count and the
+  build date — lives in `worker/wrangler.toml [vars]` (`ROWS`, `ENTITIES`,
+  `BUILT`), pasted from the export's final REPORT in step 8 and asserted by step
+  10's probe. Namespaces from before this ruling still have `.asset` companions
+  on the account; step 11 deletes each one alongside its data namespace.
 - **`upstream`** — the JSON error code the Worker returns with HTTP 502 when
-  turbopuffer, Fireworks, or the sentinel check refuses:
+  turbopuffer or Fireworks fails or times out past the retry table:
   `{"error":{"code":"upstream"}}`. It is what a whole site outage looks like from
-  the outside.
+  the outside. (A timed-out search that carries a regex condition returns
+  `regex_timeout` instead — that one is the visitor's pattern, not an outage.)
 - **The generation number** — the `-N` suffix in a namespace name. Every export
   writes a new namespace: `isasearch-2025-2-afp-2026-05-13`, then `-2`, then `-3`.
   The export picks the lowest free one by listing the account. This file always says
@@ -336,15 +339,17 @@ Four ordering rules, each with a real failure behind it:
   namespace live, every one of those links must resolve. Putting the upload before the
   export *finishes* is the simple way to guarantee it, and it leaves slack for step 7,
   which checks the links against the local tree and would not notice an empty bucket.
-- **Deploy the Worker only after the export finishes.** The Worker bundles
-  `site/tokenizer/asset.json` and compares its digest with the target namespace's
-  sentinel row, which is written at the *end* of the export. Deploying earlier —
-  whether `TPUF_NAMESPACE` still names the old namespace and the asset changed, or
-  it already names the new one whose sentinel has not landed — makes every search
-  answer `upstream`.
-- **Switch `TPUF_NAMESPACE` and deploy in one act.** The namespace name is the
-  Worker's only pointer at the data; there is no alias to flip. Editing the value
-  and deploying *is* the switch (§8.2).
+- **Deploy the Worker only after the export finishes.** Nothing refuses a
+  half-loaded namespace any more (the sentinel that used to is deleted): a Worker
+  pointed at one simply serves an index with holes, and `ROWS` — §6.3c's
+  denominator, pasted from the export's final REPORT — does not exist until the
+  run completes. The row-count check in step 7 is what stands between an
+  interrupted export and a deploy.
+- **Switch `TPUF_NAMESPACE` and deploy in one act, with its three numbers.** The
+  namespace name is the Worker's only pointer at the data; there is no alias to
+  flip. `ROWS`/`ENTITIES`/`BUILT` describe that namespace and move with it in the
+  same commit (§8.2) — a mismatched `ROWS` misroutes the count router silently,
+  which is why step 10's probe asserts the deployed values.
 
 ## How long it takes
 
@@ -372,10 +377,10 @@ three are spelled out under the table. Know which lever is which *before* you ne
 
 | Symptom | Broken piece | How to undo it |
 | --- | --- | --- |
-| Every search returns `upstream` 502 | The Worker's bundled asset disagrees with the sentinel row of the namespace it points at | Put the previous namespace name back in `wrangler.toml` and deploy. Seconds. **Traps 1 and 3 both apply.** |
-| Searches work, results wrong or entities missing | The index | Same: previous namespace, deploy. Seconds. **Traps 1 and 3 both apply.** |
+| Every search returns `upstream` 502 | The Worker cannot reach or use the namespace it points at (bad namespace name, bad `[vars]`, an upstream outage) | Put the previous namespace name AND its `ROWS`/`ENTITIES`/`BUILT` back in `wrangler.toml` and deploy — reverting step 8's commit is the reliable way. Seconds. **Traps 1 and 3 both apply.** |
+| Searches work, results wrong or entities missing | The index | Same: revert step 8's commit, deploy. Seconds. **Traps 1 and 3 both apply.** |
 | Search works, source links 404 or land on the wrong line | The published tree | `rclone sync published.<previous date> R2:isasearch/source` — **`sync`, not `copy`**, so that pages only the new tree has are removed; dry-run and read the deletions first. Then purge the zone cache. ~5 GB, so minutes, not seconds. |
-| Pages render wrong, search results fine | Worker code | Revert the code commits only, keeping this release's `wrangler.toml` line and asset, then deploy. Trap 2 has the recipe, and says why `wrangler rollback` is wrong here. |
+| Pages render wrong, search results fine | Worker code | Revert the code commits only, keeping this release's `wrangler.toml` `[vars]`, then deploy. Trap 2 has the recipe, and says why `wrangler rollback` is wrong here. |
 
 **Every row above ends with a zone-cache purge** (step 9's procedure — human-only).
 Entity pages are edge-cached four hours and source pages thirty days, so without it the
@@ -400,24 +405,26 @@ and deployed as part of the same Worker version as the code. So `wrangler rollba
 or redeploying the previous commit, silently reverts the namespace pointer along with
 the code — undoing step 8's switch. That is why the code row above says to redeploy
 the previous code *keeping the current* `TPUF_NAMESPACE`, and why a cosmetic rendering
-bug must not be fixed with a version rollback. The recipe, keeping this release's data
-pointer and asset:
+bug must not be fixed with a version rollback. The recipe, keeping this release's
+data pointer and its numbers:
 
 ```bash
-git revert --no-commit <the code commits — not the wrangler.toml or asset commit>
-git checkout HEAD -- worker/wrangler.toml site/tokenizer/asset.json    # keep both
-git commit -m "Revert <what>; keep this release's namespace and asset"
+git revert --no-commit <the code commits — not step 8's wrangler.toml commit>
+git checkout HEAD -- worker/wrangler.toml       # keep the namespace and its numbers
+git commit -m "Revert <what>; keep this release's namespace and [vars]"
 (cd worker && source ~/Current/MLML/secret.sh && npx wrangler@4 deploy)
 ```
 
-**Trap 3: rolling the namespace back does not roll the asset back.** If this
-release changed the tokenizer, the deployed Worker bundles the new
-`site/tokenizer/asset.json`, while the previous namespace's sentinel row records the
-old digest. Pointing `TPUF_NAMESPACE` back at it therefore *causes* the very mismatch
-that takes the site down — you would swap one 502 for another. After a tokenizer
-change, a rollback is **two reverts in one deploy**: the `wrangler.toml` line *and*
-the asset commit. Simplest in practice: `git revert` the release's commits and deploy
-that, rather than hand-editing one line.
+**Trap 3: a namespace rollback across a schema epoch must take the Worker code
+with it.** The regex-era Worker compiles every condition to a `Regex` filter, and
+a pre-regex namespace 400s any filter naming a non-regex column (measured
+2026-08-26) — so pointing the new code at the old namespace breaks every
+conditioned search, and the old code against the new namespace breaks the same
+way in reverse (it asks for `*_subtokens` columns the new namespace lacks).
+Across such a release, a rollback is the **whole release's commits in one
+revert-and-deploy** — code, `wrangler.toml` line and `[vars]` numbers together —
+never the namespace pointer alone. Within one schema epoch (a data refresh), the
+pointer plus its three numbers suffice.
 
 What this asks of you: **keep the previous published tree on disk until the _next_
 release** — step 11 deletes the tree two releases old, never the one you just
@@ -487,50 +494,22 @@ From that diff, answer the two questions that decide the shape of the release. B
 have a mechanical test, and both have a backstop that catches you if you answer wrong:
 
 ```bash
-# Did the namespace schema change?  Read the whole diff of this file: the column list is
-# in `namespace_schema`, but `SOURCE_LINK_SCHEMA` is a module constant beside it (shared
-# with `patch`) and the `.asset` sentinel has its own inline schema, so grepping for the
-# function name alone would miss two of the three places a column can change shape.
+# Did the namespace schema change?  Read the whole diff of this file: the column list
+# is in `namespace_schema`, and `SOURCE_LINK_SCHEMA` is a module constant beside it
+# (shared with `patch`), so grepping for the function name alone would miss one of
+# the two places a column can change shape.
 git diff $LAST..HEAD -- src/site_export.py
-
-# Did the tokenizer change?  Both implementations, the asset they read and the gate
-# that binds them all live in site/tokenizer/, so this one command is the whole answer.
-git diff --stat $LAST..HEAD -- site/tokenizer/
 ```
 
 A schema change means the full pass and never a code-only release (see *Smaller
-releases*); its backstop is brutal — a Worker asking for a column the namespace lacks
-400s every search. A tokenizer change means the gate below plus
-`--asset-change-intended` in step 6; its backstop is reliable — the export recomputes
-the asset and **stops** if it differs from the committed one, so a tokenizer change you
-failed to notice cannot silently ship. What the backstop cannot catch is a rule changed
-in one implementation only, which is what the gate is for.
+releases*); its backstop is brutal — a Worker asking for a column the namespace lacks,
+or filtering one that lacks `regex: true`, 400s every conditioned search.
 
-**If the tokenizer changed, run the tokenizer gate.** It is the only thing that holds
-the two implementations to each other (§16.6). Precondition 6's `pytest tests/` covers
-one of its four commands — `tests/test_isabelle_tokenizer.py`, 72 cases, of which one
-skips unless a live Isabelle symbol table is reachable — and nothing
-covers the other three, so run them explicitly. None needs Isabelle or the database:
+(The second question this step used to ask — did the tokenizer change? — retired
+2026-08-26 with the tokenizer itself; there is no gate to run and no
+`--asset-change-intended` to prepare.)
 
-```bash
-(cd site/tokenizer && python emit.py --check && node emit.mjs --check \
-                  && node test_tokenizer.mjs)
-python -m pytest tests/test_isabelle_tokenizer.py -q      # also run by precondition 6
-```
-
-Both `--check` commands end in `<N> inputs, 0 problems` — **the same N and the same
-underlying digest**, which is the point: one number checked twice, not two reports.
-`test_tokenizer.mjs` ends in `all passed`. All four exit 0.
-
-Then three things must be true before you start: `tokenizer_rule` was bumped in the
-same commit as the rule change; the gate passes; and you will pass
-`--asset-change-intended` in step 6. If `tokenizer_rule` was *not* bumped, stop and
-bump it as a separate commit first — the asset digest is the only thing that makes a
-rule change visible at all (§8.2), and it does not move when a rule changes without
-the bump.
-
-*Protects against:* releasing an unknown commit; discovering a tokenizer divergence
-after the export has been running for hours.
+*Protects against:* releasing an unknown commit.
 
 ### 1. The corpus scan (§17.1)
 
@@ -787,8 +766,6 @@ python src/site_export.py \
   --source-links $WORK/map-$TODAY.json \
   --checkpoint $WORK/site-export-$TODAY.checkpoint.json \
   2>&1 | tee -a $WORK/export-$TODAY.log     # -a so a resumed run appends
-# add --asset-change-intended ONLY if step 0 established the tokenizer rules
-# changed on purpose; see the asset comparison below
 ```
 
 **`| tee` hides the exit status**, so run `set -o pipefail` in that shell first (zsh
@@ -802,28 +779,25 @@ grep -m1 '^\[site-export\] namespace ' $WORK/export-$TODAY.log
 
 **Write that name down**; steps 7 and 8 need it, and step 11 needs it next time.
 
-Before writing anything it runs three gates of its own:
+Before writing anything it runs two gates of its own:
 
 - the artefact resolves and its digest is recorded — a pure local read, before any
   billed write;
-- the **asset comparison** (D46): the asset rebuilt from this installation must
-  match the committed `site/tokenizer/asset.json` in `ISABELLE_SYMBOLS` file list,
-  `tokenizer_rule` and digest. A difference stops the run unless
-  `--asset-change-intended` says the change is wanted — which it is exactly when the
-  tokenizer rules changed on purpose, and is not when an Isabelle component was
-  registered or unregistered on this machine;
 - the **completeness gate**: every shippable entity has a vector. The vector store
   is a lazy cache and holes are legal in ordinary operation, so this must fail loudly
   rather than ship a corpus with gaps. `--skip-completeness-gate` exists for a
   `--limit` smoke test and for nothing else; never pass it on a release.
 
+(The third gate that ran here — D46's asset comparison — retired 2026-08-26 with
+the tokenizer.)
+
 **Interruption is safe.** The checkpoint records the namespace, the last key and the
 artefact digest; re-running the same command continues rather than starting over,
 and keeps its half-loaded namespace instead of taking a fresh generation number.
 Changing the artefact between runs is refused. **A resumed run is still a full run**
-— the sentinel and the asset are written on any run without `--limit`
-(the guard around `write_asset_sentinel` in `site_export.run`), and the entity count is accumulated over the whole corpus,
-not over the resumed tail — so resuming does not leave the namespace unfinished.
+— the final REPORT is printed on any run without `--limit`, and its ROWS and
+ENTITIES are accumulated over the whole corpus, not over the resumed tail — so
+resuming does not leave the namespace unfinished or the report short.
 
 **Success looks like** three things in order: `upserted N document(s) into
 <namespace>`, then the per-category counts, then exit status 0. Anything else — a
@@ -847,16 +821,26 @@ records that resolve to `''` and match no Theory Name condition (533 at the 2026
 measurement, 0.04 %). Only `exported` has a downstream check. If any of the others has
 moved by an order of magnitude, find out why before deploying.
 
-At the end of a full run the export writes the sentinel row into `<namespace>.asset`
-(digest, entity count, build date) and rewrites the committed asset. When the asset
-did not change, that rewrite is a no-op and `git status` stays clean; it moves only
-on a run you passed `--asset-change-intended` to — **in which case commit it**,
-because the committed asset is the declaration of what is deployed, and the Worker
-you deploy in step 8 bundles that exact file.
+At the end of a full run the export prints its **REPORT block** — the four
+`wrangler.toml [vars]` lines, ready to paste:
 
-*Protects against:* an index tokenised by one set of rules being served by a Worker
-holding another — no error, just quietly wrong results. That is the failure class
-the asset comparison and the sentinel exist for.
+```
+[site-export] REPORT — paste into worker/wrangler.toml [vars] (RELEASE step 8):
+[site-export]   TPUF_NAMESPACE = "<namespace>"
+[site-export]   ROWS = "<row count>"
+[site-export]   ENTITIES = "<distinct entities>"
+[site-export]   BUILT = "<YYYY-MM-DD>"
+```
+
+**Write all four down.** `ROWS` is the record count and §6.3c's denominator —
+the count router's 3 % line is a fraction of it; `ENTITIES` is the D5-collapsed
+number the pages display, about 8 % lower, and never the denominator. Step 8
+pastes them beside `TPUF_NAMESPACE` in one commit; step 10's probe asserts the
+deployed pages agree.
+
+*Protects against:* a corpus with silent holes (the completeness gate), and a
+namespace/numbers pair assembled by hand instead of read off the run that built
+it.
 
 ### 7. The gate again, against the new namespace (§17.5)
 
@@ -909,16 +893,55 @@ same checkpoint; the row count is exactly the check that tells you it was not do
 *Protects against:* the one thing steps 4 and 5 cannot see — the index and the tree
 having been built from different artefacts.
 
+### 7b. The raw-text overlap sweep — the launch gate (§6.3c)
+
+**This gate exists because every overlap and latency figure behind the count
+router was measured on the `\n`-joined subtoken columns, which this schema
+deletes.** The sweep re-establishes them on the raw columns of the namespace
+that will go live, and the deadline table and the 3 % line are provisional until
+it has run. It is also the per-release re-establishment of the approximate
+branch's guarantee — the ANN overlap is a property of each index build, not of
+the design.
+
+What it measures, against the step-6 namespace, read-only (the pattern shapes
+are §6.3c's "The 3 % line" paragraph; adapt the scripts under
+`~/isasearch-pipeline/regexprobe/` — `rawprobe/probe.py` has the request
+idioms):
+
+- semantically clustered patterns, a no-literal length shape, a common-literal
+  shape, and a CTS-equivalent differential control — recording, per pattern:
+  the exact count, the ANN row count against `min(count, 200)` (the under-fill
+  rate), the ANN∩kNN overlap for full-200 results, and the fallback-kNN latency;
+- a `Not(Regex)` shape (the `excludes` compiler output), same recordings;
+- the empty-value probe: does `Not(Regex)` return the 533 empty-`theory` and
+  ~6,800 empty-`expr` rows, and does any plausible pattern match the empty
+  string?
+
+**Pass**: every full-200 ANN result above the 3 % line overlaps its kNN truth
+by ≥ 195/200; no under-filled ANN result at or above the line fails to trigger
+the fallback certificate; fallback-kNN latency fits the 15 s deadline with
+margin; the empty-value behaviour matches what the Worker assumes (empty
+patterns are rejected client- and Worker-side, so only `Not` can reach the
+empty rows). **A miss on any of these is a design input, not a tolerance**:
+raise the line, resize a deadline (both live in `wrangler.toml [vars]`) or stop
+and re-open §6.3c — record what was measured either way, in the release log.
+
 ### 8. Deploy the Worker (§8.2)
 
 `worker/wrangler.toml` has exactly one `[vars]` block and no per-environment
-overrides, so there is one line to change:
+overrides, so there are four lines to change, and they are exactly step 6's
+REPORT block:
 
 ```toml
 TPUF_NAMESPACE = "<the namespace from step 6>"
+ROWS = "<from the REPORT>"
+ENTITIES = "<from the REPORT>"
+BUILT = "<from the REPORT>"
 ```
 
-Commit it, then **a human runs**:
+**One commit for all four** — `ROWS` is the count router's denominator, and a
+namespace switched without its numbers misroutes silently. Commit it, then **a
+human runs**:
 
 ```bash
 (cd worker && source ~/Current/MLML/secret.sh && npx wrangler@4 deploy)
@@ -956,12 +979,13 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST \
   -H 'content-type: application/json' -d '{"query":"sorted list"}'
 ```
 
-`200` and you may proceed; `502` is the sentinel mismatch — go to *Rollback*.
+`200` and you may proceed; a `502` here means the deployed Worker cannot use its
+namespace or its `[vars]` — go to *Rollback*.
 
-*Protects against:* nothing on its own — but doing it out of order is the sharpest
-edge in the release. A Worker whose bundled asset does not match its target
-namespace's sentinel row answers every search with `upstream`, which is a site
-outage, not a degradation.
+*Protects against:* nothing on its own — but doing it out of order is the
+sharpest edge in the release: deployed before step 6 finishes, the site serves a
+half-loaded index with no error anywhere; deployed with a stale `ROWS`, the
+count router routes against the wrong denominator, silently.
 
 ### 9. Purge the Cloudflare zone cache
 
@@ -1021,14 +1045,16 @@ is what a visitor gets. **Your own browser is the one cache the purge cannot cle
 1. **The search page works.** Load `/`, type a query, get cards with similarities
    and source links.
 2. **`/about` prints the new entity count and build date.** These come from the
-   sentinel row, so a stale pair means step 6's sentinel did not land. **The count is
-   not `exported`** and must not be compared with it: the sentinel carries *distinct
-   entities*, which collapses each theorem and its derived-rule twin into one, so it
-   runs about 8 % below the row count: 1,230,467 entities against 1,337,009 rows, both
-   measured on the corpus the live namespace was built from (2026-08-20). What to check is that it **moved from what the page said before this
-   release**, and that the build date is today's. Fetch it fresh — this page is
-   browser-cached for an hour and is *not* in the edge cache, so your own browser is
-   the likeliest source of a stale reading: `curl -s https://isabelle-semantics.qiyuan.me/about | grep -A2 -i entities`.
+   deployed `[vars]`, so a stale pair means step 8's commit did not carry the
+   REPORT numbers. **The count is not `exported`** and must not be compared with
+   it: `ENTITIES` counts *distinct entities*, which collapses each theorem and
+   its derived-rule twin into one, so it runs about 8 % below the row count
+   (1,230,467 entities against 1,337,009 rows on the 2026-08-20 corpus). What to
+   check is that the page shows **exactly the configured values** — the probe
+   below asserts it mechanically with `SITE_URL` — and that the build date is
+   today's. Fetch it fresh — this page is browser-cached for an hour and is
+   *not* in the edge cache, so your own browser is the likeliest source of a
+   stale reading: `curl -s https://isabelle-semantics.qiyuan.me/about | grep -A2 -i entities`.
 3. **One entity page.** Take the link from any result card in check 1. Confirm the
    statement, the `Defined in` line, the source link, and the ten nearest entities.
 4. **One source link clicked through** to `/source/<theory>.html#L<n>`, landing on
@@ -1062,31 +1088,34 @@ is what a visitor gets. **Your own browser is the one cache the purge cannot cle
    add `-o -` to see `{"error":{"code":"burst_limit","layer":"edge"}}`. Fonts and
    pages must be unaffected — the rule is scoped to `/api/search` alone.
 
-7. **The count router, once the Worker implements it (plan §6.3c).** Three checks,
-   all through `/api/search` — a curl straight at turbopuffer exercises no line of
-   the router and passes even when the router is absent or inverted:
-   - A conditioned search for `f x = x` (Expression panel) returns **every** true
-     match: assert against an independent aggregate count over the whole filter
-     tree *including a kind selection*, and state the expected number after the
-     entity collapse (rows and cards differ by ~3–9 %).
-   - The branch boundary: pick one condition, run it with the 3 % line set just
-     above and just below its match count (the line lives in `wrangler.toml
-     [vars]`). Below-line must be row-complete; above-line must return 200 within
-     the deadline **and** overlap the below-line run by ≥ 195/200. The overlap
-     half is also the **per-release re-establishment of the approximate branch's
-     guarantee** — it is a property of each index build, not of the design.
-   - Both runs' rows carry `$dist` (the similarity column is computed from it).
+7. **The count router (plan §6.3c).** Two checks through `/api/search` — a curl
+   straight at turbopuffer exercises no line of the router and passes even when
+   the router is absent or inverted:
+   - **Below the line, exact.** A conditioned search whose count sits under 3 %
+     (e.g. Expression `f x = x`, ~142 matches, plus a kind selection) answers
+     `mode: "exact"` with `rows == count` (both are record counts in the
+     response) and `complete: true` when count ≤ 200 — every true match, the
+     certificate the old ANN path failed by 140/142.
+   - **Above the line, within budget.** A dense condition (e.g. Expression
+     `= `) answers `mode: "approximate"` with 200 rows inside the deadline, or
+     falls back to an exact answer — either is a pass; a 5xx or an under-filled
+     approximate answer is not.
+   Both responses' cards carry similarities (computed from `$dist`).
 
-The read-only probe covers the machine-facing half:
+The read-only probe covers the machine-facing half — the schema assertion, the
+certificate on both rank modes, the `Not(Regex)` complement, the engine-message
+shape and (with `SITE_URL`) the `/about` values:
 
 ```bash
 TPUF_NAMESPACE=<the namespace> \
 TURBOPUFFER_API_KEY="$turbopuffer_ISASEARCH_READ_KEY" \
 FIREWORKS_API_KEY="$EMBEDDING_API_KEY" \
+SITE_URL=https://isabelle-semantics.qiyuan.me \
 node worker/probe/live_probe.mjs
 ```
 
 It prints one `PASS`/`FAIL` line per check and exits non-zero if any failed.
+(The ANN-vs-kNN overlap itself was step 7b's business, before the deploy.)
 
 ### 11. Retire the predecessor, and record the release
 
@@ -1100,8 +1129,9 @@ storage to the bill every release.
 Three things make this step easy to get wrong, and all three are why it is written
 out at length rather than left to arithmetic.
 
-**Each release occupies two namespace names** — the data namespace and its `.asset`
-companion. A clean account after a release therefore lists **four** names, not two.
+**Namespaces from before 2026-08-26 have `.asset` companions; new ones do not.**
+The sentinel mechanism is deleted, so a fresh export occupies one name. A legacy
+data namespace retires together with its companion — delete the pair.
 
 **Names are recycled, so you cannot identify the oldest by its number.** The export
 takes the *lowest free* generation number. Delete the base name and the next export
@@ -1111,13 +1141,15 @@ meaningless. **The order releases happened in is recorded only in the release lo
 (`pipeline/HANDOVER-review3.md`), never in the names. Read it, name the survivors,
 and delete by name.
 
-**A data namespace with no `.asset` companion is an abandoned run**, not a
-generation: the sentinel is written only when an export completes, so a `--limit`
-smoke test or a run whose checkpoint was lost leaves one behind, possibly holding
-gigabytes. Those are safe to delete regardless of age, and they must not be counted
-as one of the two you keep.
+**An abandoned run** — a `--limit` smoke test, or a run whose checkpoint was
+lost, leaving a partial namespace possibly holding gigabytes — **is identified by
+the release log**, which names every real generation; a namespace the log does
+not name (and `wrangler.toml` does not point at) is one. (The old test — "no
+`.asset` companion" — died with the sentinel: no new namespace has one.) Those
+are safe to delete regardless of age, and they must not be counted as one of the
+two you keep.
 
-List what exists — the companions make the pairing visible:
+List what exists:
 
 ```bash
 TURBOPUFFER_API_KEY="$turbopuffer_DEV_KEY" python - <<'EOF'
@@ -1227,11 +1259,11 @@ Then:
   cp $WORK/map-$TODAY.json  pipeline/map-artefact.json  # repository already carries
   ```
 
-- **Nothing deploy-affecting is committed here.** The `wrangler.toml` line and the asset
-  (if it moved) both went in at step 8, *before* the deploy, because the deploy bundles
-  the working-tree file and the sha you are about to record must describe what is
-  running. If either is still uncommitted now, that sha does not — stop and work out
-  what was deployed before you record anything.
+- **Nothing deploy-affecting is committed here.** The `wrangler.toml` `[vars]`
+  went in at step 8, *before* the deploy, because the deploy bundles the
+  working-tree file and the sha you are about to record must describe what is
+  running. If they are still uncommitted now, that sha does not — stop and work
+  out what was deployed before you record anything.
 - **Append a block to `pipeline/HANDOVER-review3.md`**, this project's release log:
   the namespace, the artefact content hash, the deployed Worker version, **the commit sha you deployed** — step 0 of
   the next release bounds its history with it — the published-tree directory name, the figures observed at every
@@ -1246,12 +1278,13 @@ Then:
 
 Not every change needs the whole pass. Step 0's preflight applies to all of them.
 
-- **Worker code or copy only** (no schema change, no tokenizer change): steps 0, 8,
-  9, 10 — and in step 8, leave `TPUF_NAMESPACE` alone; only the deploy applies. The
-  namespace is untouched, so step 10's check 2 inverts: `/about`'s entity count and
-  build date must be **unchanged**, since the sentinel row they come from was not
-  rewritten. Then append to the release log as step 11 describes: it is
-  the only record of what is deployed, and step 0 of the *next* release reads it.
+- **Worker code or copy only** (no schema change): steps 0, 8, 9, 10 — and in
+  step 8, leave `TPUF_NAMESPACE` and its three numbers alone; only the deploy
+  applies. The namespace is untouched, so step 10's check 2 inverts: `/about`'s
+  entity count and build date must be **unchanged**, since the `[vars]` they
+  come from were not edited. Then append to the release log as step 11
+  describes: it is the only record of what is deployed, and step 0 of the *next*
+  release reads it.
 - **A tree-side fix only** (a rendering correction, no corpus change): steps 0, 3, 4,
   5, 9, 10, reusing the **committed** artefact `pipeline/map-artefact.json` in place of
   `$WORK/map-$TODAY.json`. This is consistent with the rule that a full release
@@ -1320,26 +1353,20 @@ that column did, and every export since composes the column itself.
      **that** directory aside; it is this release's failed attempt. **Never move or
      delete the previous release's `published.<date>`**, which is the only copy of the
      source-page rollback.
-- **The export stops on the asset comparison.** Read which of the three parts it
-  names. **If only `symbol_files` differs**, the tables are unchanged and the
-  tokenizer behaves identically — an Isabelle component was registered or
-  unregistered here. Refresh the committed asset rather than override the guard:
-  `site/tokenizer/build_inputs.py` then `site/tokenizer/emit.py --update`, commit that,
-  and re-run. **If `tokenizer_rule` or the digest moved**, a rule or a table
-  changed, and `--asset-change-intended` is right *provided* you meant it — and the
-  Worker's copy of the asset then has to be deployed with the index, which is step
-  8's ordering rule. The error message itself says all this; it is repeated here
-  because it scrolls past at hour zero of a four-hour job.
 - **The export stops on the completeness gate.** Entities exist with no vector.
   Embed them before releasing; do not pass `--skip-completeness-gate`.
-- **Every live search answers `upstream` after deploying.** `upstream` is one code
-  for three refusals — turbopuffer, Fireworks, or the sentinel check — so do not
-  assume the third. In order of likelihood after a release: the sentinel disagrees
-  (the deploy went out before the export finished, or `TPUF_NAMESPACE` still names the
-  old namespace); or one of the **Worker's own secrets** is missing or expired, which
-  nothing in this release verifies and which looks identical from outside —
-  `npx wrangler@4 secret list` in `worker/` shows which are set, though not whether
-  they still work. Roll back per the table above to stop the bleeding, then work out
-  which.
+- **Every live search answers `upstream` after deploying.** `upstream` covers
+  turbopuffer and Fireworks failures past the retry table, and a broken router
+  config (`ROWS`/`EXACT_FRACTION`/`DEADLINES_MS` unparseable — the Worker fails
+  loudly rather than misroute). In order of likelihood after a release:
+  `TPUF_NAMESPACE` names a namespace that does not exist or is half-loaded; the
+  `[vars]` were mis-pasted; or one of the **Worker's own secrets** is missing or
+  expired, which nothing in this release verifies and which looks identical from
+  outside — `npx wrangler@4 secret list` in `worker/` shows which are set, though
+  not whether they still work. Roll back per the table above to stop the
+  bleeding, then work out which. A `regex_rejected` or 400 on every *conditioned*
+  search while bare searches work means the namespace's text columns lack
+  `regex: true` — the Worker is pointed at a pre-regex namespace (§12.2's
+  ordering constraint).
 
 ---
