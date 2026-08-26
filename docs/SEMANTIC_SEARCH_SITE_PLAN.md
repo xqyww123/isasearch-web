@@ -261,14 +261,17 @@ reader of those sections needs to find the decision that used to govern them.
   pseudo-theory and availability is governed by their constituent theories. An
   earlier draft of this plan treated the absence as a 14.7 % data gap to be
   filled; that framing was wrong and is withdrawn (§7).
-- **D14** — **the theory filter matches constituent theories for theorem-alike
-  entities**, and the declaring theory for name-addressed ones. The two
-  alternatives were measured and rejected: letting theorems pass unfiltered
-  leaves the candidate set at 84.9–85.0 % whatever is filtered, i.e. the filter
-  silently stops working; excluding theorems when the filter is active hides the
-  85 % of the corpus users mostly want (§7.2).
-- **D15** — **the difference in meaning is stated plainly in the interface**, not
-  hidden and not smoothed over with an option. No mode selector.
+- ~~**D14**~~ — **superseded by D55 (2026-08-26)**: the theory filter matched
+  constituent theories for theorem-alike entities and the declaring theory for
+  name-addressed ones. Its own reasoning survives it — letting theorems pass
+  unfiltered pins the candidate set at 84.9–85.0 % whatever is filtered, and
+  excluding them hides 85 % of the corpus (§7.2) — but it assumed those were
+  the only two alternatives to matching constituents. D55 takes the third: give
+  a theorem a defining theory, derived from its source position.
+- ~~**D15**~~ — **superseded by D55 (2026-08-26)**: with D14 gone there is no
+  difference in meaning left to state, and COPY §3.4's note is deleted. Its
+  principle stands wherever a difference does remain: state it plainly, never
+  hide it, never paper over it with a mode selector.
 - **D16** — **the site lives in this repository**: the site export as a module of
   the Python package, the web application under `site/` (§12.1).
 - **D17** — **the domain is `isabelle-semantics.qiyuan.me`.**
@@ -1113,12 +1116,21 @@ reader of those sections needs to find the decision that used to govern them.
   datasets.
 - **D26** (2026-08-13) — **a theorem's result card shows no theory line.** That
   much is the user's, and he reached it himself: "我认为对于 theorem-like 是不显示
-  theory consitutent 比较好。你觉得呢？" **The exception below is the author's and
-  has not been put to him** — unless a theory condition is active, in which case the
-  card shows the theories that matched it, marked as matches and with no "+N more".
-  It is the only case in which a theorem card prints constituent theories at all, so
-  it is the part to raise if any part of D26 is reopened. Name-addressed entities
-  always show their one declaring theory. The measurement below is why the author
+  theory consitutent 比较好。你觉得呢？" It stands, and the exception that once
+  qualified it is gone.
+
+  **The exception, removed 2026-08-26 by D55.** It was the author's and was
+  never put to the user: when a Theory Name condition was active, the card
+  marked which of the theorem's constituent theories had matched — the one case
+  in which a theorem card printed a constituent theory at all. It existed
+  because a theorem carried seven of them on average and a reader could not
+  otherwise tell which the condition had found. A record carries one theory
+  now, so a condition that matches has matched it. Name-addressed entities also
+  no longer print their declaring theory on the card: since 2026-08-25 the
+  source line under the name carries it with the file and the line, and the
+  entity page says it in a sentence (COPY §8's `Defined in`).
+
+  The measurement below is why the author
   agrees with the default, not how the default was decided: only 0.2 % of
   theorem-alike records have fewer than three constituent theories, so
   truncation is the norm; and the alphabetically first constituent belongs to
@@ -1237,6 +1249,56 @@ reader of those sections needs to find the decision that used to govern them.
   including the literal form of this decision the user first proposed
   (`ContainsAllTokens` as the single operator), which was rejected on measured
   grounds.
+- **D55** (2026-08-26) — **a Theory Name condition matches one theory, the one
+  the entity is written in, for every kind alike; and that theory is derived
+  once in the export and stored, never recomputed in a browser.**
+
+  This **supersedes D14** and, with it, the interface obligation **D15** placed
+  on the difference D14 created, and **D26**'s card marking. D14 gave the
+  Theory Name field two meanings — a name-addressed entity's declaring theory,
+  a theorem-alike entity's constituent theories — because Isabelle records no
+  declaring theory for a theorem (D13, which stands: nothing here invents one).
+  Two consequences followed. The interface had to explain the split (four
+  drafts, §13b), and the filter barely filtered: 99 % of statements mention
+  something from `HOL`, so `HOL.` matched 98.6 % of theorem-alike records.
+
+  What D13 leaves out is not the only evidence available. A theorem's **source
+  position** is recorded for 98.8 % of the corpus, and §17's map already
+  resolves a position file to exactly one published theory page named by the
+  theory. So the theory is **derived from evidence, not invented**. The rule,
+  in order: Isabelle's own declaring theory for a name-addressed entity (the
+  key's 16-byte prefix — its position is *not* consulted, and must not be:
+  1,236 records are declared in one theory and positioned in another file);
+  otherwise the theory the position's page names; otherwise the theory base
+  name the record's own name begins with — of `from_collection` for a
+  collection member, whose position points at the collector rather than at the
+  fact — resolved against the record's own dependencies first and the published
+  tree second, ambiguity resolving to nothing rather than to a guess.
+
+  Measured over the whole store, 2026-08-26: position resolves **98.40 %** of
+  theorem-alike records, the fallback carries it to **99.95 %**, name-addressed
+  is **100 %**, and **533** (0.04 %) resolve to nothing and therefore match no
+  Theory Name condition at all. Cross-checked twice: against each record's own
+  name (**99.88 %** agree) and against the 198,483 name-addressed records whose
+  answer is already known from the key hash (**99.38 %** agree) — every
+  disagreement in both being `AutoCorres2.CLocals`, whose ML machinery mints
+  entities for eleven theories from inside its own file (§17's opening already
+  names it). Filtering `HOL.` now selects **4.0 %** instead of 98.6 %, and
+  **9,796** theories are reachable by a condition instead of 8,329.
+
+  **Where the derivation lives is part of the ruling** (the user's, in his own
+  words: the information should be computed locally and stored, so that a
+  better way of computing it later costs one re-export and no front-end
+  change). It is computed beside `source_links` in `site_source_pages.py`, off
+  the same `(file, page)` pair, so a row cannot carry a link into one theory
+  and name another.
+
+  The column layout this implies, and the three deletions that fall out, are
+  §6.1's; the interface consequences are COPY §3.4 (the caveat, deleted) and
+  §8 (the section renamed and narrowed to theorems, and a `Defined in` line
+  added to the Source block). **D24's scope test keeps using the dependency
+  set**, not this one theory: the scope question is whether everything a record
+  needs comes from a declared session, which one theory cannot answer.
 
 ## 3. Measured evidence
 
@@ -2192,11 +2254,14 @@ port. To stop them drifting:
 ```
 id               UUID  = a 128-bit hash of the universal key (§6.2); stable,
                        because D33's key repair runs before any export
-group            string  128-bit hash of `(name, entity expression)`. **No
-                       longer read** (D5 as amended 2026-08-25: the collapse
-                       class is the universal key with the tag byte masked,
-                       computed by the Worker from `key`); drop at the next
-                       export
+                       -- `group` (string, filterable) stood here and was
+                       DELETED 2026-08-26 with D55's generation.  It was a
+                       128-bit hash of `(name, entity expression)`, the entity
+                       page's identity and D5's collapse class; D9 as amended
+                       addressed the page by document id and D5's collapse
+                       became the universal key with the tag byte masked, after
+                       which nothing read it -- and it was still carrying a
+                       filterable index
 vector           [4096]f16, cosine_distance   (D31)
 
   display
@@ -2205,12 +2270,34 @@ key              string        the full universal key, base64url. §6.2 puts it 
                                read back; nothing filters on it
 name             string
 expr             string        cleaned per §8.3, original whitespace kept
-theories         []string      the theory long names this document is filtered
-                               by (§7.2): the declaring theory when
-                               name-addressed, all constituents when
-                               theorem-alike (mean 7.1, max 42)
+theory           string        THE theory this entity is written in, and what a
+                               Theory Name condition matches (§7.0, D55).  One
+                               name, empty for the 533 records nothing resolves.
+                               Replaced `theories` ([]string) on 2026-08-26,
+                               which held the declaring theory when
+                               name-addressed and all constituents when
+                               theorem-alike -- the two senses D55 separated
+constituent_theories []string  DISPLAY ONLY, and empty for every name-addressed
+                               record: the theories declaring the constants a
+                               statement uses (mean 7.1, max 42).  No full-text
+                               index -- no condition reaches it any more, and it
+                               is read only when an entity page renders, where
+                               COPY §8 heads it `Theories of the constants
+                               used`.  SORTED by the export: turbopuffer stores
+                               an array in the order given (probed 2026-08-26),
+                               so the export's order IS the chips' order
 kind             string        this record's single kind — D5 does not merge
 position         string        symbolic path + line, from ENTITY_POSITION_PLAN
+source_link      string        the finished href a card emits,
+                               `/source/<page>.html#L<line>`, or the empty
+                               string -- D42's absent form.  Composed once at
+                               map time by `site_source_pages.source_links`
+                               (D49 ruling 2, §17.6); added to the live
+                               namespace by `patch_rows` on 2026-08-24 and
+                               declared here since.  §6.1 did not name it until
+                               2026-08-26, which was an omission and not a
+                               design: the column has been part of every export
+                               since it was introduced
 from_collection  string        empty unless `name` is a name the enumeration
                                INVENTED for a member of a dynamic fact
                                collection, in which case it is that
@@ -2238,15 +2325,27 @@ name_subtokens   []string      reached by the `Entity Name` panel (D22).
                                Mean 6.77 elements; this is the short one.
                                On the authority, 2026-08-19: mean 6.62, and
                                none of its 1,343,793 arrays empty either
-theory_subtokens []string      the subtokens of every name in `theories`,
-                               concatenated with a separator token between
-                               names (§6.3).  Subtokens, not tokens, per D23;
-                               named `theory_tokens` through draft 2.  Mean
-                               24.71 elements over the records that have
-                               constituents, separator tokens counted
+theory_subtokens []string      the subtokens of the ONE name in `theory` (§6.3).
+                               Subtokens, not tokens, per D23; named
+                               `theory_tokens` through draft 2.  Until
+                               2026-08-26 it held every constituent's subtokens
+                               with a separator element between names (mean
+                               24.71); the separator went with the list, there
+                               being nothing left to straddle.  EMPTY for the
+                               533 records with no defining theory, which is how
+                               they match no Theory Name condition rather than a
+                               wrong one -- turbopuffer accepts `[]` here,
+                               never matches it with ContainsTokenSequence,
+                               still returns it under a negation, and reads it
+                               back as `[]` rather than as a missing key
+                               (probed against a throwaway namespace 2026-08-26)
 
   ranking
-interpretation   string        BM25-indexed (§6.5)
+interpretation   string        display only since 2026-08-26.  Its full-text
+                               index -- case folded, stemmed, stopwords removed
+                               -- had one reader, the BM25 leg, dropped
+                               2026-08-25 when the hybrid measured worse than
+                               the vector leg alone (§6.5)
 ```
 
 ### 6.2 Document id
@@ -2316,21 +2415,18 @@ separator class.
 decision and not an open implementation detail — earlier drafts filed it under
 "small things being decided without further consultation", which was wrong.
 
-**Measured, 2026-08-20: turbopuffer keeps it, and `"\n"` stands.** §8.1's step 0b
-records the probe and what it establishes. The paragraph below stays because it says
-what to do if the answer ever changes — the export re-asks on every run.
+**Retired 2026-08-26 with D55.** `theory_subtokens` carries one theory name
+now, so there are no two names for a sequence to straddle and no separator to
+put between them. `THEORY_SEPARATOR` and step 0b's live probe
+(`check_theory_separator`) are both deleted from the export. The record, for
+completeness: turbopuffer did keep the whitespace-only element, measured
+2026-08-20 and re-confirmed on every export run until the last, and `"\n"`
+never had to be replaced. The user's choice of 2026-08-09 was never overridden;
+it simply has nothing left to apply to.
 
-What §8.1 owns is a **validation, not a re-opening**. Whether turbopuffer stores and
-indexes a whitespace-only element of a `pre_tokenized_array` at all was never
-measured (§3.3 did not test it), and if it is dropped the adjacency straddle above
-comes back. One upsert against a test namespace settles it. **If it is dropped, the
-substitute goes back to the user**, because replacing `"\n"` replaces his choice:
-choose a non-whitespace character the tokenizer cannot emit — every character the
-tokenizer can emit is either a letter, a digit, a quasi-letter, an ASCII-symbolic
-character or a single other character it passes through, so a control character
-outside the separator class is the natural fallback. This test is **step 0b of §8.1**
-so that it cannot be forgotten; §16.8 lists it as one of the questions to settle
-during the work.
+Everything above this paragraph is kept as the account of why the separator
+existed and how it was chosen, which is what a reader needs if a list-valued
+filtered field is ever proposed again.
 
 Index cost. Two sets of figures, and the difference between them is the population,
 not the rule — an earlier draft gave the first set with no denominator at all:
@@ -2343,8 +2439,12 @@ name_subtokens                         6.30                         6.77
 ```
 
 Quote the whole-corpus column when sizing the production namespace, since that is what
-gets built. `theory_subtokens` is counted over the records that carry constituent
-theories, separator tokens included.
+gets built. **The `theory_subtokens` figures are pre-D55**: 24.71 counted every
+constituent's subtokens over the records that had constituents, separator tokens
+included. Under D55 the field holds one theory name, so the mean falls to roughly
+what a single long name tokenises to — a few elements — and this is now the
+cheapest of the three indexes rather than the second dearest. Not re-measured;
+the namespace it would size has not been built yet.
 
 ### 6.3b The query instruction (fixed 2026-08-25)
 
@@ -2508,6 +2608,48 @@ paragraph said, this is information, not a design input (D28).
 
 ## 7. Theories for filtering
 
+### 7.0 What a Theory Name condition matches, as of 2026-08-26 (D55)
+
+**One theory: the one the entity is written in.** For a name-addressed entity
+that is Isabelle's own record, read off the key's 16-byte theory hash. For a
+theorem-alike entity Isabelle records none (§7.1 below, which stands), so it is
+**derived** from the source position: the file a statement was written in
+publishes to exactly one theory page, and that page is named by the theory.
+
+| step | applies to | source | coverage |
+|---|---|---|---|
+| 1 | name-addressed | the key's theory hash, through the registry (§7.3) | 199,155 — 100 % |
+| 2 | theorem-alike, not a collection member | §17's map: position file → published page → theory | 1,121,637 — 98.40 % |
+| 3 | the rest | the theory base name the record's own name (or its collection's) begins with, resolved against its own dependencies, then against the published tree | 17,722 — 1.55 % |
+| — | 533 records (0.04 %) | nothing resolves; they match no Theory Name condition | — |
+
+Step 2 never applies to a name-addressed entity even though a position is
+usually there: 1,236 of them are declared in one theory and positioned in
+another file, and there Isabelle is right and the position is not.
+
+What this buys, against §7.2's own table, is the point of the change:
+
+```
+condition            matched by constituents (D14)   matched by the one theory (D55)
+HOL.                 1,124,361  (98.6 %)                45,104  ( 4.0 %)
+HOL-Library            154,366  (13.5 %)                15,890  ( 1.4 %)
+HOL-Analysis            46,938  ( 4.1 %)                15,676  ( 1.4 %)
+HOL-Probability         17,924  ( 1.6 %)                 2,658  ( 0.2 %)
+HOL-Algebra             29,605  ( 2.6 %)                 7,655  ( 0.7 %)
+Jordan_Normal_Form      10,108  ( 0.9 %)                 2,643  ( 0.2 %)
+```
+
+The constituent theories are not discarded — they move to their own
+display-only column and to the entity page under COPY §8's `Theories of the
+constants used`, where a sentence says what they are. What is gone is their
+being what a *condition* matched.
+
+**§7.1 and §7.2 below are kept as written.** §7.1 is still true and still
+load-bearing — nothing here invents a declaring theory where Isabelle has none;
+it derives one from evidence Isabelle does record. §7.2 records the measurement
+that made D14 the right decision at the time, and the two alternatives it ruled
+out; D55 took a third that §7.2 did not consider.
+
 ### 7.1 Theorem-alike entities have no declaring theory (D13)
 
 An earlier draft treated "the declaring theory is missing for 14.7 % of
@@ -2522,7 +2664,7 @@ Consequently **`ENTITY_POSITION_PLAN.md` needs no change** — no 14th field, no
 extra work folded into its backfill. An earlier revision of this plan
 recommended exactly that; it is withdrawn.
 
-### 7.2 What the theory filter matches (D14)
+### 7.2 What the theory filter matched under D14 — superseded by §7.0
 
 | entity kind | filtered against | source | coverage |
 |---|---|---|---|
@@ -4557,10 +4699,16 @@ the deletion quota?*
 
 - ~~**Does turbopuffer store and index a whitespace-only element in a
   `pre_tokenized_array`?**~~ **Settled 2026-08-20: it does, and `"\n"` stands.**
-  §6.3 puts it between theory names precisely because the tokenizer can never emit
-  it; §8.1's step 0b records the probe, which the export now re-runs on every run
+  §6.3 put it between theory names precisely because the tokenizer can never emit
+  it; §8.1's step 0b recorded the probe, which the export re-ran on every run
   rather than trusting the one measurement. It was listed here as a question and
   nowhere as a step, so nothing owned it — that is what making it step 0b fixed.
+  **Moot since 2026-08-26 (D55)**: the field holds one theory name, so nothing is
+  separated from anything. The probe is deleted. The related question that D55
+  *did* have to ask — whether turbopuffer accepts an EMPTY `pre_tokenized_array`
+  and leaves it unmatched — was probed the same day against a throwaway
+  namespace: it does, the row is never matched by `ContainsTokenSequence`, it IS
+  returned by a negation, and it reads back as `[]` rather than as a missing key.
 - ~~**What number does the RRF fusion return per row?**~~ **Measured 2026-08-21
   against the live namespace.** With `rerank_by: ["RRF"]` each fused row carries
   exactly one number, in `$dist`, and it is the RRF score itself
