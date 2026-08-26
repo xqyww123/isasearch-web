@@ -4232,12 +4232,14 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   **Also observed while measuring**: the cold-first-vector-query phenomenon
   reproduced twice more on production — 9.13 s on an ANN query after an idle gap
   (fourth observation) and one kNN query that exceeded a 300 s client timeout after
-  a ~4-minute idle gap yet ran at 542 ms on retry. Worth including in any
+  a ~4-minute idle gap yet ran at 542 ms on retry. ~~Worth including in any
   turbopuffer conversation (a draft engineering report sits at
   `~/isasearch-pipeline/regexprobe/agentC/turbopuffer-report-draft.md`, not sent).
   The probe namespace `isasearch-regexprobe-64d-1200k` is deliberately left alive
   as the reproduction substrate — delete it once the turbopuffer conversation is
-  settled (a rebuild costs ~12 minutes via `build.py`).
+  settled (a rebuild costs ~12 minutes via `build.py`).~~ **Ruled 2026-08-26: the
+  report is not sent** ("不发"); the probe namespace was deleted the same day
+  (rebuild recipe: `~/isasearch-pipeline/regexprobe/build.py`, ~12 minutes).
 
   **The 4 KiB filterable-value limit does not apply** (measured 2026-08-26, closing this
   question): a `{"type":"string","glob":true,"regex":true}` column accepted a
