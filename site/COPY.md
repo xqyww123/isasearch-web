@@ -83,6 +83,7 @@ prefix matching that does not exist. Nothing in the interface may imply it.
 | **defined in «theory»** — where an entity is written, the one thing a Theory Name condition matches (§8.1) | declared in, proved in, lives in | one word for one concept, and it is the user's own from §3.5's foot line |
 | **derived rule** — an Introduction rule, an Elimination rule, an Induction rule or a Case split; **defined at first use, every time** | theorem-alike, theorem-like | draft 2 used two undefined collective terms |
 | **select** / **selected** for the Kind buttons | tick, chip | "tick" is British and low-frequency |
+| **regex switch** — the per-condition control that makes the condition a regular expression (§3.2; ships with the re-export, plan §13 Q14) | mode, toggle button | one control, one name; "toggle" is taken by contains/excludes |
 
 Absent by decision: **literally**; **run** as a noun; **allowance**; **resets**;
 **authoritative** outside D30's locked first sentence; **carry** in the sense of
@@ -212,6 +213,20 @@ The toggle reads **contains** / **excludes** (D22). The control that adds anothe
 condition reads:
 
 > add condition
+
+**The regex switch** (ships with the Q13/Q14 re-export; absent until then). Each
+condition carries a switch labelled:
+
+> regex
+
+Off by default. Off, the condition matches parts as §0 says. On, the condition
+text is a regular expression; the switch's hover:
+
+> The condition is a regular expression, matched against the entity's parts
+> joined by newlines. See the about page.
+
+The full teaching lives on the about page (§14), following this file's rule that
+rules are taught where they bite and the always-visible chrome stays short.
 
 ### 3.3 — deleted 2026-08-25 with the All panel
 
@@ -493,14 +508,14 @@ not jump sideways when a button appears:
 
 > previous 20   «21–40 of 194» / «page 2 of 10»   next 20
 
-At the end of the results, **when the retrieval came back full** — 200 rows,
-which all but proves that more entities satisfy the conditions:
+At the end of the results, **when the condition's exact match count exceeds the
+rows returned**:
 
 > Isasearch returned the «194» most relevant entities for this search. Others
 > also satisfy your conditions but were not returned. If what you are looking for
 > is not among them, add a condition to narrow the search.
 
-At the end of a list shorter than that:
+At the end of a list that contains every match:
 
 > These are all «137» entities that satisfy your conditions.
 
@@ -518,10 +533,15 @@ number of **cards**, which is smaller than the 200 rows retrieved because
 several records can describe one entity (D5's collapse): 200 rows became 194
 cards on the search these numbers come from.
 
-The trigger is "the retrieval came back full", not a proof that more exist
-(user-ruled 2026-08-25: keep the simple test). A search that is satisfied by
-exactly 200 rows would show the capped sentence although nothing was left out —
-the one case where it overstates.)*
+The trigger compares the condition's exact match count with the rows retrieved —
+both record counts, before the entity collapse; the printed number stays the card
+count, exactly as above. The count exists because every search now computes it to
+choose its rank mode (plan §6.3c), so the completeness sentence is a proven fact,
+not an inference from a full page. Until 2026-08-26 the trigger was "the retrieval
+came back full" (user-ruled 2026-08-25: keep the simple test — sound while no
+exact count existed); its one overstating case, a search satisfied by exactly 200
+rows, is gone with it. Editorial authority over this file was delegated to the
+implementation on 2026-08-26 ("COPY.md 你可以自主编辑").)*
 
 ### 4.6 — deleted 2026-08-25
 
@@ -684,6 +704,14 @@ genuine backend failure is §6's territory, which already covers it.
 
 > Enter a query. The syntactic filters only narrow the results; they cannot
 > search by themselves.
+
+### 5.8 A regular expression the engine rejects (ships with the re-export)
+
+The engine's own message, quoted verbatim after one fixed sentence — the engine
+names the defect better than a paraphrase would, and its messages are legible
+("look-around, including look-ahead and look-behind, is not supported"):
+
+> This regular expression was rejected: «the engine's message».
 
 ## 6. While searching, and when it fails
 
@@ -1071,7 +1099,26 @@ The two paragraphs of §3.5 verbatim, then:
 > the name `n`. To search by the structure of a term, use Isabelle:
 > `find_theorems` and `find_consts` search structurally inside a session.
 
-(§5.1.)
+(§5.1. **The first sentence becomes false when the regex switch ships and is
+replaced then** by: "A condition matches text. With its regex switch on, it is a
+regular expression instead; it still has no term variables — to search by the
+structure of a term, use Isabelle: `find_theorems` and `find_consts` search
+structurally inside a session.")
+
+**Regular expressions** (a new about-page section; ships with the Q13/Q14
+re-export, absent until then):
+
+> With a condition's regex switch on, the condition is a regular expression. It
+> is matched against the entity's parts joined by newlines, with a newline at
+> each end — so `\nsorted\n` finds the whole part `sorted`, and
+> `\nsorted\n(?:[^\n]+\n)+wrt\n` finds `sorted` followed by `wrt` with one
+> or more parts between them. `.` never crosses a newline; `(?s:.)*` is the gap
+> that can. A pattern matches anywhere in the sequence of parts — no anchors are
+> needed. The dialect is Rust's `regex`: look-around and back-references do not
+> exist. Characters that are regular-expression syntax but ordinary Isabelle
+> text — `+` `*` `(` `)` `[` `]` and the other metacharacters — must be escaped
+> with a backslash when meant literally: `\nx\n\+\ny\n` finds the three
+> adjacent parts `x + y`.
 
 **About the explanations**
 

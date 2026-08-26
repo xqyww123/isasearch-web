@@ -2548,7 +2548,8 @@ counts records while the interface counts D5-collapsed entities, two different
 numbers). Its one interface use — choosing between COPY §4.5's two existing
 end-of-list sentences by `count == rows` instead of the current heuristic, which today
 prints "These are all «2» entities that satisfy your conditions" against 142 true
-matches — is a COPY.md change awaiting the user's sign-off.
+matches — is done in COPY.md §4.5 (2026-08-26; the user delegated editorial
+authority over COPY.md the same day).
 
 **The 3 % line (user-ruled).** A fraction of the row count, so every release
 re-derives it by construction; today it is ~40,100 rows. Its measured basis (full
@@ -4279,8 +4280,11 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   engine; cost is bounded by the scan the count round pays regardless, measured
   10–385 ms per pattern at 1.2M rows).
 
-  What the reader must be told, in the interface's own documentation (copy
-  needs the user's wording): patterns match a **substring of the token stream**
+  What the reader must be told, in the interface's own documentation (written
+  2026-08-26 — COPY.md §3.2 regex switch, §5.8 rejection message, §14's
+  regular-expressions section — under the editorial authority the user delegated
+  that day; note COPY.md's vocabulary says **part**, never token): patterns
+  match a **substring of the token stream**
   — the field's subtokens joined by `\n` with a `\n` at each end — so a literal
   token is spelled `\nfoo\n`, "skip one or more tokens" is spelled
   `(?:[^\n]+\n)+` (`.` does not cross `\n`; `(?s:.)*` is the zero-or-more gap),
