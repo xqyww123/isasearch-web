@@ -921,3 +921,91 @@ one measurement, needs a spaced probe); thin-space vs comma digit grouping
   attempt put it inside the Source block, where the user could not find it.
   Always shown; omitted only when there is no theory; **not on the result card**.
 - `constituent_theories` is sorted by the export.
+
+---
+
+## STATE AT COMPACT #7 (2026-08-26, late) — Q14 OPEN ON AN UNEXPLAINED FAILURE
+
+### NEXT TASK, as the user set it: find out why 41
+
+**Reproduce and explain**: at 1,200,000 rows, the condition `x + y` (2,831 true
+matches, so a full page is available) returned **41 of `top_k` 200** under a bare
+`Glob` and under a bare `Regex` over the `\n`-joined subtoken column, while
+`ContainsTokenSequence` returned 200. At 400k it was 97; at 100k it was fine. Adding
+`ContainsTokenSequence` clauses on the pattern's literal runs — logically implied, so
+they cannot change the answer, and verified not to — restored 200 in every case.
+
+**The mechanism is NOT known.** An earlier write-up of this in the plan asserted a
+cause (index-backed prefilter versus unindexed scan) that was *constructed, not
+verified*; that wording has been corrected. Two things make the gap serious rather
+than academic: the failure is silent, and turbopuffer's own documentation attaches the
+partial-postfilter recall warning to `ContainsTokenSequence` — which showed **no** loss
+anywhere, including live at 1,337,009 rows with real vectors, checked set-wise and
+rank-wise against locally computed ground truth — and *not* to `Glob`/`Regex`, which
+are the ones that lose. That inversion is unexplained, and it means the model of this
+subsystem is wrong somewhere.
+
+Three experiments, cheapest first, written out in plan §13's Q14:
+1. **Raise `top_k` on a bare `Regex`.** If the cause is a fixed ANN candidate budget
+   followed by post-filtering, `top_k` 2000 should return ~410 usable rows, not a full
+   200. A full 200 falsifies that hypothesis and points elsewhere.
+2. **Ask turbopuffer.** Their `Regex` warning says to contact them; their docs
+   reference a "Native Filtering" article on how filters combine with ANN.
+3. **Measure the case never measured**: the `All` panel's three-way `Or` of narrowed
+   filters, and cross-field combinations — where an unexplained repair is likeliest to
+   stop working.
+
+**Reproduction cost**: the probe namespaces were deleted. Scripts and every raw log are
+preserved at `~/isasearch-pipeline/regexprobe/` (5.6 MB, four sizes). Rebuilding 1.2M
+rows at 64 proxy dimensions is ~25 minutes at ~320 rows/s; 4096 dimensions runs at
+~23 rows/s, which is why the large namespaces used reduced dimensions.
+
+**Do not write Q14 into an implementation plan until 1 or 2 answers the question.**
+
+### Done and pushed today
+
+- **`docs/RELEASE.md`** — the release checklist, which did not exist. Five rounds of
+  reader agents; they found an ordering bug (acceptance ran before the cache purge),
+  two rollback paths that caused the outage they were meant to fix, a delete step
+  identified by recycled generation numbers, and several wrong claims of mine —
+  including that `/about` prints the export's `exported` count, when it prints the
+  sentinel's *distinct entity* count (~1.23M against 1.34M rows), which would have
+  failed that acceptance check on every release.
+- **The tokenizer moved into this repository** (`site/tokenizer/`), with its tests and
+  the CI workflow. The §16.6 gate's two halves had been looking for each other across
+  the 2026-08-24 repository split since it happened, so the Python half had not run for
+  two days — silently, because a gate that cannot start looks like a gate with nothing
+  to report. All four commands now pass together. Audited adversarially: a mutated copy
+  moves exactly one digest, and poisoned modules on `PYTHONPATH` are ignored.
+
+### Rulings today, all in plan §13 Q14 or §14.5/§14.6
+
+Wildcard `_` = one or more subtokens, structure-blind (bracket matching was measured
+working at bounded depth, then ruled out); server-side, no Worker post-filter (so §6.6's
+prohibition is never engaged); all three panels; `\n`-joined column with leading and
+trailing sentinels; **plain escaping via `escape-string-regexp`, not symmetric
+encoding** — verified 55/55 on metacharacter-bearing subtokens and 14,922 distinct
+subtokens producing valid patterns; `Regex` over `Glob`, chosen for the escaping story,
+not the 1.4–1.7× speed edge, which is invisible on the leg the site actually sends.
+Arbitrary-depth bracket matching is permanently closed: the engine is Rust `regex`
+(identified from its own error strings) and every recursion extension is rejected.
+The 4 KiB filterable-value limit does not apply (62,891-byte value accepted and matched).
+
+`publish` + `gate` + the R2 upload are part of the coming release. Step 5 uploads with
+`rclone copy` and defers the deleting `sync` to step 11.
+
+### Still open, unchanged
+
+Q13 (whether `_`/`.` become matchable subtokens) rides with the same re-export or not;
+`_`'s lexing rule (whitespace-delimited only?) and what a wildcard-only condition does.
+The release itself has not been run: live is still `6e38ad41`, and the code is not
+deployable alone because turbopuffer 400s a query naming an absent column.
+
+Cleanup outstanding: `isasearch-preview-20260826` and its `.asset`; the
+`TPUF_NAMESPACE` line in `worker/.dev.vars`; the `wrangler dev` on 8787;
+`published.pre-basefix-20260824` (5.1 GB).
+
+**Also seen twice**: on production, the first vector query after a burst of filter-only
+queries took 9.2 s and 9.6 s, against a steady state of 21–40 ms. Probably the same
+thing as the long-deferred "10.7 s first request after idle" — now with a second
+observation and a known trigger.

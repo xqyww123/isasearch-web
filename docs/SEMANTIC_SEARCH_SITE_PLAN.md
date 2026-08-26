@@ -3953,8 +3953,11 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   narrowing that the warning itself sanctions is free here, because a wildcard pattern's
   literal runs are **logically implied by** the regex and so cannot change the result set.
 
-  **The literal-run narrowing is a CORRECTNESS requirement, not an optimisation.**
-  This is the one finding nobody predicted and the one an implementer must not drop.
+  **An observed failure, a workaround that repairs it, and NO explanation — read this
+  before building anything.** What follows is measured; the mechanism behind it is not
+  known, and the first write-up of it here (2026-08-26) asserted a cause that was
+  invented rather than verified. Until the cause is found, treat the workaround as
+  empirical: it repaired every case measured, and nobody can say where it stops.
   Bare `Glob` and bare `Regex` **silently return far fewer rows than `top_k`** as the
   namespace grows: at 1.2M rows the condition `x + y` (2,831 true matches) returned
   **41 of 200**, at 400k it returned 97, at 100k it was fine — and `ContainsTokenSequence`
@@ -3967,8 +3970,34 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   pattern's literal runs restored 200 of 200 in every case measured, and cannot change
   the answer because the runs are logically implied by the pattern — verified, all five
   mechanisms agreed on the exact ground-truth id set for every condition in every
-  namespace. **So the compiled filter is always
-  `And([ContainsTokenSequence(run₁), …, Regex(pattern)])`, never the pattern alone.**
+  namespace. So the compiled filter should be
+  `And([ContainsTokenSequence(run₁), …, Regex(pattern)])` and never the pattern alone —
+  **but that is a rule derived from a repair whose mechanism is unknown, not from an
+  understanding of the engine.**
+
+  **And there is a contradiction nobody has explained.** turbopuffer's documentation
+  attaches the partial-postfilter recall warning to `ContainsTokenSequence` and not to
+  `Glob`/`Regex`. The measurements are the exact reverse: `ContainsTokenSequence` showed
+  **no** loss anywhere, including on the live 1,337,009-row namespace with real vectors,
+  set-wise and rank-wise against locally computed ground truth — while `Glob` and
+  `Regex`, which carry no such warning, are the ones that lose rows. An unexplained
+  inversion of the vendor's own documentation means the model of this subsystem is
+  wrong somewhere, and a silent-failure mode is the worst place to be wrong.
+
+  **What is NOT known, and what would settle it.** Three experiments, in order of cost:
+  (1) if the cause is a fixed ANN candidate budget followed by post-filtering, then
+  raising `top_k` should recover rows roughly in proportion — bare `Regex` at
+  `top_k` 2000 should return ~410 usable rows, not a full 200; if it returns a full 200
+  the hypothesis is wrong and the cause is elsewhere. (2) Ask turbopuffer: the `Regex`
+  warning itself says to contact them, and their docs reference a "Native Filtering"
+  article on how filters combine with ANN. (3) Measure the case that was never measured
+  — the `All` panel's three-way `Or` of narrowed filters, and cross-field combinations,
+  which is where an unexplained repair is most likely to stop working.
+
+  **Do not write this feature into an implementation plan until (1) or (2) answers the
+  question.** The probe scripts and every raw log are preserved at
+  `~/isasearch-pipeline/regexprobe/`; the probe namespaces themselves were deleted, so
+  reproduction costs a rebuild (~25 minutes for 1.2M rows at 64 proxy dimensions).
 
   **The 4 KiB filterable-value limit does not apply** (measured 2026-08-26, closing this
   question): a `{"type":"string","glob":true,"regex":true}` column accepted a
