@@ -225,8 +225,10 @@ text is a regular expression; the switch's hover:
 > The condition is a regular expression, matched against the entity's parts
 > joined by newlines. See the about page.
 
-The full teaching lives on the about page (§14), following this file's rule that
-rules are taught where they bite and the always-visible chrome stays short.
+There is no fuller teaching anywhere (user-ruled 2026-08-26): the hover's one
+line carries the only fact a regex-literate reader cannot infer — what the
+pattern is matched against — and §5.8's verbatim engine message announces the
+dialect's limits when they bite.
 
 ### 3.3 — deleted 2026-08-25 with the All panel
 
@@ -297,8 +299,9 @@ against, which is the fact two independent readers reported missing everywhere
 on the site, and it says it in always-visible text rather than in a hover.)*
 
 *(The full matching rules — the separator class, operators standing as parts of
-their own, whole-part matching, the order rule, spacing — live on the about page
-(§14) and in the empty states (§5.1), which teach them at the moment they bite.)*
+their own, whole-part matching, the order rule, spacing — live in the empty
+states (§5.1), which teach them at the moment they bite; the about page's
+restatement was deleted 2026-08-26, see §14.)*
 
 ### 3.6 The Kind buttons
 
@@ -1034,7 +1037,7 @@ plan.
 
 ## 14. The about page — approved 2026-08-25
 
-Heading: **About Isasearch**, then a table, then six sections. §1–§4 reuse
+Heading: **About Isasearch**, then a table, then five sections. §1–§4 reuse
 wording locked elsewhere in this file (named beside each); the sentences marked
 *new* were approved by the user on 2026-08-25.
 
@@ -1091,34 +1094,16 @@ this paragraph with §2's; the paragraph below names those four kinds anyway.)
 BM25 paragraph went with the checkbox, and what replaced it says plainly what
 "semantically" in the landing page's first sentence means.)
 
-**How a condition is matched**
-
-The two paragraphs of §3.5 verbatim, then:
-
-> A condition matches text, not patterns. It has no variables: `?n` searches for
-> the name `n`. To search by the structure of a term, use Isabelle:
-> `find_theorems` and `find_consts` search structurally inside a session.
-
-(§5.1. **The first sentence becomes false when the regex switch ships and is
-replaced then** by: "A condition matches text. With its regex switch on, it is a
-regular expression instead; it still has no term variables — to search by the
-structure of a term, use Isabelle: `find_theorems` and `find_consts` search
-structurally inside a session.")
-
-**Regular expressions** (a new about-page section; ships with the Q13/Q14
-re-export, absent until then):
-
-> With a condition's regex switch on, the condition is a regular expression. It
-> is matched against the entity's parts joined by newlines, with a newline at
-> each end — so `\nsorted\n` finds the whole part `sorted`, and
-> `\nsorted\n(?:[^\n]+\n)+wrt\n` finds `sorted` followed by `wrt` with one
-> or more parts between them. `.` never crosses a newline; `(?s:.)*` is the gap
-> that can. A pattern matches anywhere in the sequence of parts — no anchors are
-> needed. The dialect is Rust's `regex`: look-around and back-references do not
-> exist. Characters that are regular-expression syntax but ordinary Isabelle
-> text — `+` `*` `(` `)` `[` `]` and the other metacharacters — must be escaped
-> with a backslash when meant literally: `\nx\n\+\ny\n` finds the three
-> adjacent parts `x + y`.
+**How a condition is matched — deleted 2026-08-26.** The user: "现在我们用正则
+表达式了，大家都知道是怎么做的，根本不需要给这些细节" — the site's readers are
+power users; regex semantics are common knowledge, the dialect's limits announce
+themselves through §5.8's verbatim engine message, and the one fact that cannot
+be inferred — the pattern is matched against the entity's parts joined by
+newlines — is the regex switch's hover (§3.2), one line, exactly where the
+reader is. The section had carried §3.5's two paragraphs, the "matches text,
+not patterns" paragraph, and (for a few hours) a regular-expressions teaching
+section; the token-sequence matching rule is still taught where it bites, in
+the empty states (§5.1–§5.3).
 
 **About the explanations**
 

@@ -4280,11 +4280,14 @@ Q1, Q2 and Q4 of draft 1 are settled — see D19, D18 and D13 respectively.
   engine; cost is bounded by the scan the count round pays regardless, measured
   10–385 ms per pattern at 1.2M rows).
 
-  What the reader must be told, in the interface's own documentation (written
-  2026-08-26 — COPY.md §3.2 regex switch, §5.8 rejection message, §14's
-  regular-expressions section — under the editorial authority the user delegated
-  that day; note COPY.md's vocabulary says **part**, never token): patterns
-  match a **substring of the token stream**
+  What the reader must be told shrank to one hover line, by the user's ruling
+  of 2026-08-26 ("大家都知道是怎么做的"): COPY.md §3.2's regex switch hover
+  carries the one non-inferable fact (the pattern is matched against the
+  entity's parts joined by newlines — COPY's vocabulary says **part**, never
+  token), §5.8 relays the engine's own error verbatim, and the about page
+  teaches nothing (its matching section was deleted the same day). For the
+  implementer's reference only: patterns match a **substring of the token
+  stream**
   — the field's subtokens joined by `\n` with a `\n` at each end — so a literal
   token is spelled `\nfoo\n`, "skip one or more tokens" is spelled
   `(?:[^\n]+\n)+` (`.` does not cross `\n`; `(?s:.)*` is the zero-or-more gap),
