@@ -1200,3 +1200,93 @@ empty-value Not(Regex) probe; record overlap, under-fill rate, fallback-kNN
 latency; deadlines provisional until it runs). Scripts to adapt:
 ~/isasearch-pipeline/regexprobe/ (probe.py in rawprobe/ shows the current
 request idioms).
+
+## STATE AT COMPACT #9 (2026-08-27) — THE RELEASE STARTS NOW
+
+**The code is done, committed and pushed; the release itself has not started.**
+Implementation ran through compact #8's list ①②③; what remains is ④, a full
+RELEASE.md pass. The user gave the go-ahead in the same breath as asking for
+this compact ("建议先 compact the context 而后开始").
+
+**The two implementation commits** (both on `origin/main`):
+- `d3586b8` — the count router (§6.3c) in the Worker, and the regex-era front
+  end (placeholder/hover, live `\<symbol>` replacement from the 489-name
+  `symbols.json`, the newline→`\s+` paste handler, live validation by the
+  vendored rregex 1.13.1 WASM build, `complete` replacing `limit_reached`, the
+  rewritten empty states, `abbrevs.json` retired).
+- `c7df6d9` — the export: `name`/`expr`/`theory` become
+  `{"type":"string","regex":true}`, the `*_subtokens` columns and the whole
+  tokenizer subsystem (with D46's guard, the CI gate workflow and the `.asset`
+  sentinel) are deleted, and the run ends with the four-line REPORT block.
+  RELEASE.md was rewritten for the era in the same commit.
+
+**Verified before the release, 2026-08-27 (all seven preconditions green):**
+
+| precondition | observed |
+|---|---|
+| right host | both `browser_info` and the semantic DB present |
+| toolchain | venv python (`~/Current/MLML/.venv`), node v20.20.2, rclone 1.60.1 |
+| DB quiet | `lsof +D` over the semantic DB: **no output**. The RPC host that held it (PID 3543184, `run_attached__`, cwd `contrib/phi-system`) exited on its own |
+| `data/theories.json` | not checked by hand — the map step hard-fails on staleness |
+| keys | all six resolve (`set`) |
+| tree + tests | clean; 126 pytest + 35 node tests pass |
+| disk | 183 G free |
+
+**The three step-0 values, in hand** (RELEASE calls this pass/fail):
+- deployed Worker: last deployment 2026-08-25 (a secret change); the code is
+  `6e38ad41`, i.e. pre-everything;
+- live namespace: `isasearch-2025-2-afp-2026-05-13`, `approx_row_count`
+  1 337 009 — exactly the configured `ROWS`; `ENTITIES` 1 230 467, `BUILT`
+  2026-08-20;
+- published tree R2 is serving: **`published`** — `rclone check published
+  R2:isasearch/source --one-way` reports 0 differences over 11 750 files. **It
+  is the source-page rollback and must survive this entire release.**
+  `published.pre-basefix-20260824` (5.1 GB) is the stale one, safe to drop.
+
+**The plan for the release**, in this order, with `$WORK=~/isasearch-pipeline`
+and `$TODAY=20260827` (fix it once; a release can cross midnight):
+
+0. **A ~10-minute rehearsal first** (the author's recommendation, which the
+   user did not object to when giving the go-ahead — if he wants it skipped he
+   will say so): `--limit 2000` into a scratch namespace, then point the local
+   dev Worker at it and run a real conditioned search through the router. The
+   3-row smoke test of 2026-08-26 proved the schema; this proves the real
+   record stream, real vectors and the router end to end. Delete the scratch
+   namespace afterwards.
+1. `scan` → 2. `map` (record the content hash) → 3. `publish` into
+   `published.20260827` → 4. `gate` (tree) → 5. `rclone copy` to R2 (**copy,
+   never sync** — the deletions wait for step 11) → 6. the full export
+   (~3 h 36 m, ~29 GB, $22–45; detached under tmux with `set -o pipefail` and
+   `tee`) → 7. `gate --namespace --sample 1000` → **7b. the raw-text overlap
+   sweep, the launch gate**.
+2. **Then stop.** Step 8 (`wrangler deploy`) and step 9 (the zone-cache purge)
+   are human-only; the site stays on the old Worker and the old namespace until
+   the user runs them, which is safe.
+
+**The three things the user was told before starting, so they are not
+rediscovered mid-run:**
+1. **The launch gate can only run after the export.** Every figure behind the
+   3 % line and the deadline table was measured on the `\n`-joined subtoken
+   columns this schema deletes, and the sweep that re-derives them needs a
+   regex-schema namespace at production scale — which only the export produces.
+   If the sweep comes back badly, what changes is two `wrangler.toml [vars]`
+   numbers (the line fraction, the deadlines); the exported data stays good.
+   The cost is that the router's real operating point is unknown until ~4 hours
+   in.
+2. The rehearsal above.
+3. Steps 8 and 9 need the user at the keyboard four to five hours from now.
+
+**Environment right now:** the wrangler dev server on 8787 was killed and is
+NOT running; restart it with `cd worker && npx wrangler@4 dev --local --port
+8787` if the front end needs looking at (its `.dev.vars` points at
+`isasearch-preview-20260826`, which is the OLD schema, so a conditioned search
+there correctly returns `regex_rejected` — that is expected until the
+re-export). The browser extension was not connected, so **the front end has
+never been seen in a real browser**; the vendored validator was verified
+head-lessly instead (valid/invalid patterns, `\<sorted\>` word boundary, the
+engine's own message text).
+
+**Cleanup backlog, unchanged:** `isasearch-preview-20260826` and its `.asset`
+companion, the `worker/.dev.vars` `TPUF_NAMESPACE` line,
+`published.pre-basefix-20260824` (5.1 GB), and the regexprobe scratch under
+`~/isasearch-pipeline/regexprobe/` (incl. the 406 MB `groundtruth.npz`).
