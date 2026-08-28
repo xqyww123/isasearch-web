@@ -23,15 +23,22 @@ which key to turn, when, and what should come out. Decisions are cited as `D46`,
 jobs. They pass one artefact between them — the **file→page map** — and almost
 every way a release goes wrong is a step reading an artefact that describes a
 different corpus or a different tree from the one actually in play. The gates exist
-to catch exactly that. **A gate that fails is doing its job.** The one supported way
-to move a gate's baseline is `gate --update-counters`, and its diff is reviewed by a
-human before it is committed; nothing else about a failing gate is negotiable.
+to catch exactly that. **A gate that fails is doing its job.** For the link-check
+`gate` (steps 4 and 7) the one supported way to move a baseline is
+`gate --update-counters`, and its diff is reviewed by a human before it is
+committed; nothing else about a failing link-check gate is negotiable. Step 7b's
+launch gate is the one exception in this document, and a deliberate one: it
+*measures* two numbers the design rests on, so a miss there is a design input
+that may legitimately move a knob. Step 7b says which two and what to do.
 
 **Two standing hazards, before anything else.** They are explained where they bite,
 but they decide how carefully you move, so they are named here:
 
-1. **Step 5's upload commands have never been run in this form** against a bucket that
-   already holds a tree. Its dry run is not optional.
+1. **Step 5 writes into the prefix the live site is serving**, and its dry run
+   is not optional — a truncated or failed dry run reads exactly like "nothing
+   needs copying". The commands were first run in this form against a
+   populated bucket on 2026-08-27 (12 of 11,750 files changed); before that
+   they had only ever faced an empty one.
 2. **Step 11 deletes namespaces permanently**, and the names are recycled, so the
    wrong one looks plausible. It wants a second pair of eyes.
 
@@ -47,46 +54,69 @@ starting one.
 
 ## The checklist
 
-Six things this checklist cannot compress, so read them once before using it:
-**one release at a time**; **nothing may write the semantic DB from step 1 until step 6
-finishes**, or the export dies hours in and steps 1–5 are all re-run; **`$WORK` is
-never `/tmp`**; **`$TODAY` is fixed once and re-entered literally** — a release can
-cross midnight and a stale value prunes R2 to an older tree; **step 5 writes into the
-prefix the live site is serving**; **step 11 deletes namespaces permanently**.
+Six things this checklist cannot compress. Read them once before using it:
+
+- **One release at a time.** Nothing enforces it.
+- **Nothing may add or change records in the semantic DB from step 1 until step 6
+  finishes**, or the export dies hours in and steps 1–5 are all re-run.
+  Precondition 8's vector backfill is the one exception: it writes vectors, not
+  records.
+- **`$WORK` is never `/tmp`.**
+- **`$TODAY` is fixed once and re-entered literally.** A release can cross
+  midnight, and a stale value prunes R2 to an older tree.
+- **Step 5 writes into the prefix the live site is serving.**
+- **Step 11 deletes namespaces permanently.**
 
 ```
-[ ]  0  right host, toolchain, ~5 GB free, DB quiet, keys set (all six), tree clean,
-        tests green; RECORD the deployed version, the current TPUF_NAMESPACE,
-        and the previous published-tree directory; schema change?
+[ ]  0  right host, toolchain (Isabelle on PATH too), ~5 GB free, DB quiet,
+        keys set (all six), tree clean, tests green, EVERY shippable record has a
+        vector; set $WORK and $TODAY and write $TODAY down; RECORD the deployed
+        version, the current TPUF_NAMESPACE, and the previous published-tree
+        directory; schema change?
         (a schema change is never a code-only release)
-[ ]  1  scan                       ~30 s
+[ ]  1  scan                       ~30 s   → RECORD BOTH numbers: the counts
+        block's `records`, and the final line's N record(s)
 [ ]  2  map                        ~8 s      → RECORD the content hash
+[ ] 2b  OPTIONAL rehearsal, ~10 min: a --limit smoke test into a scratch
+        namespace; delete that namespace and restore worker/.dev.vars
 [ ]  3  publish -> published.<date>          → KEEP the previous tree until the
                                                NEXT release: source-page rollback
 [ ]  4  gate (tree)                          → three counters unchanged, or STOP
-[ ]  5  rclone COPY (never sync here) → check --one-way = 0 differences
-[ ]  6  site export, detached + tee ~3 h 36 m+ → RECORD the namespace AND the
-        final REPORT block (ROWS / ENTITIES / BUILT)
+[ ]  5  prove the prefix with rclone lsf (cheap, read-only, do it FIRST);
+        rclone dry run TO A FILE (never | head), read both summaries;
+        rclone COPY (never sync here) → check --one-way = 0 differences,
+        then prove the prefix again — check cannot catch a wrong one
+[ ]  6  site export, detached, python -u + set -o pipefail + tee ~3 h 36 m+
+        → RECORD the namespace AND the final REPORT block (ROWS/ENTITIES/BUILT)
         (may overlap 3-5; step 5 must be done before step 8)
 [ ]  7  gate --namespace --sample 1000       → exit 0
-[ ] 7b  the raw-text overlap sweep (the LAUNCH GATE, §6.3c) against the new
-        namespace → overlap ≥ the 3 % line's margin, deadlines confirmed
+[ ] 7b  the raw-text sweep (§6.3c): node worker/probe/launch_gate.mjs,
+        needs TPUF_NAMESPACE and ROWS
+        → exit 0 blocks on: kNN certificate, no uncaught under-fill, fallback
+          kNN inside 15 s, empty-value behaviour, score parity
+        → ANN∩kNN set overlap is RECORDED, not enforced (see the step)
+        → KEEP its JSON record for the release log
 [ ]  8  wrangler.toml: TPUF_NAMESPACE + ROWS + ENTITIES + BUILT, all four from
         step 6's REPORT, ONE commit; wrangler deploy                (human)
         → only after 6 finished, or searches serve a half-loaded index
         → then curl /api/search: 200 before you purge anything
 [ ]  9  purge the zone cache (whole zone - conda.qiyuan.me too),
         confirm MISS->HIT                                          (human)
-[ ] 10  live acceptance, AFTER the purge: /, /about, an entity page,
-        a source link, CoreC++, the rate limit, live_probe.mjs
-[ ] 11  IRREVERSIBLE. delete by NAME, never by generation number: everything
-        older than the two you keep, plus abandoned runs (the release log names
-        the real generations) and the legacy .asset companions of retired
-        namespaces; guards in the script, second person confirms. Then prune
-        R2 (sync, read the deletions, purge again - human), drop the tree two
-        releases old, copy artefacts into pipeline/, commit, append to the
-        release log (namespace, artefact hash, Worker version, COMMIT SHA,
-        tree directory, every figure observed), push to origin
+[ ] 10  live acceptance, AFTER the purge (private window or curl): /, /about,
+        an entity page, a source link, CoreC++, the rate limit, BOTH count-router
+        checks through /api/search, live_probe.mjs
+[ ] 11  APPEND TO THE RELEASE LOG FIRST (namespace, artefact hash, Worker
+        version, COMMIT SHA, tree directory, every figure observed, the step-5
+        rclone invocation you actually ran, step 7b's JSON record, step 6's
+        REPORT block) - the order releases happened in is recorded NOWHERE else.
+        THEN, IRREVERSIBLE: delete by NAME, never by generation number -
+        everything older than the two you keep, plus abandoned runs (the release
+        log names the real generations) and the legacy .asset companions of
+        retired namespaces; guards in the script, second person confirms.
+        Then prune R2 (sync, read the deletions, purge again - human), drop the
+        tree two releases old, restore worker/.dev.vars if 2b touched it,
+        restart whatever precondition 3 made you stop, copy artefacts into
+        pipeline/, commit, push to origin
 ```
 
 If the site is broken at any point, stop and go to **Rollback**, which sits just
@@ -136,8 +166,9 @@ on, restated so the steps can be read on their own.
 - **The artefact's content hash** — the sha256 of the artefact's body, which every
   later step re-checks. Logs print its **first 12 hex digits**, both in the map's
   `wrote … (content hash …)` line and in the export's, so the two are compared as
-  written. One value, three names in the logs: `links_digest` in the export, the
-  artefact hash in the checkpoints.
+  written. One value, three names: the map calls it a content hash, the
+  export calls it `links_digest`, and step 11's release log calls it the
+  artefact hash.
 - **The corpus scan**, or **the scan**: the positions read out of the semantic DB.
   Input to the map.
 - **The vector store** — the LMDB of embedding vectors beside the semantic DB. It
@@ -151,9 +182,10 @@ on, restated so the steps can be read on their own.
   are regular expressions over the raw text columns (plan §13 Q14), so there is no
   tokenizer, no `site/tokenizer/asset.json`, no D46 component guard and no
   `<namespace>.asset` companion. What the pages print — the entity count and the
-  build date — lives in `worker/wrangler.toml [vars]` (`ROWS`, `ENTITIES`,
-  `BUILT`), pasted from the export's final REPORT in step 8 and asserted by step
-  10's probe. Namespaces from before this ruling still have `.asset` companions
+  build date — comes from `worker/wrangler.toml [vars]`: `ENTITIES` and `BUILT`
+  are displayed, and `ROWS` beside them is the count router's denominator and is
+  never displayed. All three are pasted from the export's final REPORT in step 8
+  and asserted by step 10's probe. Namespaces from before this ruling still have `.asset` companions
   on the account; step 11 deletes each one alongside its data namespace.
 - **`upstream`** — the JSON error code the Worker returns with HTTP 502 when
   turbopuffer or Fireworks fails or times out past the retry table:
@@ -172,7 +204,10 @@ on, restated so the steps can be read on their own.
   page: `/entity/<the key, base64url without padding>`. There is no way to compose one
   by hand; take it from a result card.
 - **The super-repo** — the MLML repository this one sits inside,
-  `~/Current/MLML`. It owns `data/theories.json` and `secret.sh`.
+  `~/Current/MLML`. It owns `data/theories.json` and the two files every shell in
+  this document sources: `envir.sh`, which puts the Isabelle distribution on
+  `PATH`, and `secret.sh`, which sets the keys. Neither is committed to *this*
+  repository and `secret.sh` is committed nowhere.
 
 ---
 
@@ -201,12 +236,17 @@ hands it over, and waits. In a Claude Code session the human runs it by typing
 ## Preconditions
 
 Everything from here on, preconditions included, runs from the repository root in a
-shell that has sourced the keys:
+shell that has sourced both the environment and the keys:
 
 ```bash
 cd ~/Current/MLML/contrib/isasearch-web
-source ~/Current/MLML/secret.sh
+source ~/Current/MLML/envir.sh     # puts Isabelle on PATH — see precondition 2
+source ~/Current/MLML/secret.sh    # the keys
 ```
+
+**Both lines, every shell.** `envir.sh` is not decoration: without it the very
+first command of the release dies (precondition 2 says why, and which steps
+care).
 
 The commands below assume **zsh or bash**. Precondition 5's loop avoids bash's `${!v}`
 indirect expansion, which zsh rejects, so it runs under either.
@@ -229,7 +269,14 @@ indirect expansion, which zsh rejects, so it runs under either.
    ```bash
    python -c 'import sys, Isabelle_Semantic_Embedding as m; print(sys.prefix, m.__file__)'
    node --version && rclone version | head -1
+   command -v isabelle || echo 'ISABELLE NOT ON PATH — source envir.sh'
    ```
+
+   **Isabelle must be on `PATH`** — that is what `source ~/Current/MLML/envir.sh`
+   is for. The scan and the export find the distribution and the AFP through
+   `ISABELLE_HOME` and `AFP`, falling back to `isabelle getenv`; with neither
+   they refuse to start: `cannot locate Isabelle and the AFP`. Measured
+   2026-08-27, only **steps 1, 2b and 6** need it — steps 2, 3, 4 and 7 do not.
 
    If `sys.prefix` is not that venv, the shell's initialisation has not put it on
    `PATH`: either fix that, or prefix every `python` below with
@@ -245,6 +292,10 @@ indirect expansion, which zsh rejects, so it runs under either.
    collection or embedding run finishing halfway through therefore invalidates the
    artefact and stops the export — hours in. There is no lock: stop any RPC host,
    REPL server or collection job first, and do not start one until step 6 is done.
+
+   **The one deliberate exception is precondition 8's vector backfill**, and it
+   is safe for a reason stated there: it writes vectors, never records. Read
+   precondition 8 before concluding that this rule forbids it.
 
    ```bash
    lsof +D ~/.cache/Isabelle_Semantic_Embedding 2>/dev/null | grep -iv 'cwd\|zsh'
@@ -267,8 +318,9 @@ indirect expansion, which zsh rejects, so it runs under either.
    | Used by | Command-line variable | Value from `secret.sh` |
    | --- | --- | --- |
    | site export, namespace deletion (**write**) | `TURBOPUFFER_API_KEY` | `$turbopuffer_DEV_KEY` |
-   | `gate --namespace`, `live_probe.mjs` (**read**) | `TURBOPUFFER_API_KEY` | `$turbopuffer_ISASEARCH_READ_KEY` |
-   | `live_probe.mjs` | `FIREWORKS_API_KEY` | `$EMBEDDING_API_KEY` |
+   | `gate --namespace`, `launch_gate.mjs`, `live_probe.mjs` (**read**) | `TURBOPUFFER_API_KEY` | `$turbopuffer_ISASEARCH_READ_KEY` |
+   | `launch_gate.mjs`, `live_probe.mjs` | `FIREWORKS_API_KEY` | `$EMBEDDING_API_KEY` |
+   | precondition 8's vector backfill | `EMBEDDING_API_KEY` | itself — the embedding driver reads this name directly, so sourcing `secret.sh` is all it needs |
    | R2 upload | `RCLONE_CONFIG_R2_ACCESS_KEY_ID` / `…_SECRET_ACCESS_KEY` | `$R2_ISASEARCH_ACCESS_KEY_ID` / `$R2_ISASEARCH_SECRET_ACCESS_KEY` |
    | `wrangler deploy` | `CLOUDFLARE_API_TOKEN` | `$CLOUDFLARE_API_TOKEN` — the least-privilege `isasearch-deploy` token, already in `secret.sh`, so sourcing it is enough |
 
@@ -289,7 +341,7 @@ indirect expansion, which zsh rejects, so it runs under either.
    expansion is a syntax error in zsh, which is this machine's shell.)
 
    **One name, two values.** `TURBOPUFFER_API_KEY` is set per-command from *different*
-   secrets — the write key for steps 6 and 11, the read key for steps 7 and 10.
+   secrets — the write key for steps 2b, 6 and 11, the read key for steps 7, 7b and 10.
    Do not export it once for the session; every command below that needs it sets it
    on its own line, and that is deliberate.
 
@@ -308,6 +360,55 @@ indirect expansion, which zsh rejects, so it runs under either.
    11 deletes — so budget ~15 GB of occupancy overall. The export streams to the
    network and stages nothing large on disk.
 
+8. **Every shippable record has a vector**, or step 6 refuses to export.
+
+   Step 6's completeness gate fails the release on any shippable record without
+   a vector. It is right to fail and must never be skipped — but it runs *after*
+   steps 1-5, so meeting it there burns their wall-clock for nothing. Ask now:
+   two to four minutes, Isabelle on `PATH` as for the scan, and written as one
+   line so that pasting it at any indentation is safe.
+
+   ```bash
+   python -c "import sys,contextlib;sys.path.insert(0,'src');import site_export as se;reg=se.theory_registry();sess=se.declared_sessions(*se._default_trees());c=dict.fromkeys(('records','undecodable','wip','experience','out of scope'),0);st=contextlib.ExitStack();get,_d=se.vector_reader(st,se.vector_store_path());m=sum(1 for k,r,dep in se.iter_shippable(sess,reg,c) if get(k) is None);print(m,'shippable record(s) with no vector;',c['records'],'records seen')"
+   ```
+
+   It prints two numbers: how many shippable records lack a vector, and how many
+   it saw. **Anything but zero on the first** means fix it before step 1, with
+   the offline, incremental backfill below.
+
+   ```bash
+   python ~/Current/MLML/contrib/Semantic_Embedding/Isabelle_Semantic_Embedding/isabelle_semantics.py \
+     embed --yes Qwen/Qwen3-Embedding-8B
+   ```
+
+   The model argument is the canonical HuggingFace name, read off the vector
+   store's directory: `vector_Qwen__Qwen3-Embedding-8B.lmdb` →
+   `Qwen/Qwen3-Embedding-8B`. It authenticates with `EMBEDDING_API_KEY`, so
+   sourcing `secret.sh` is all it needs, and it does not need Isabelle. Re-run
+   the probe afterwards and require zero.
+
+   **It does not breach precondition 3**, which protects the *record set*: the
+   backfill writes only the vector store — a lazy cache, beside the DB — and
+   adds or changes no record.
+
+   **If step 6's gate catches you anyway**, the backfill is still the fix and
+   steps 1-5 stand — but only if the record set has not moved, and missing
+   vectors alone do not tell you that. Records collected after the scan also
+   arrive without vectors, and that is a precondition-3 breach reported in these
+   same words. The gate's own message settles it, with nothing to re-run: it
+   reads `<n> of <m> shippable records have no vector`, and that **`<m>` is the
+   same quantity as step 1's counts-block `records`**. Equal means the record
+   set is where the scan left it — delete nothing, re-run step 6 alone. Larger
+   means records moved under you: follow "The export stops on a document id the
+   artefact does not name" in *When something fails* instead. The artefact hash
+   settles nothing here; it only says you handed the export the same file.
+
+   Measured 2026-08-27: 5,119 records without vectors, 5,373 embedded (the
+   backfill's scope is slightly wider), 1,124,538 tokens, minutes, cents. The
+   failed attempt created no namespace and wrote no checkpoint — the gates do
+   run before any billed write — so that day's log holds two attempts and two
+   `namespace` lines, which is why step 6 says to read the last one.
+
 ---
 
 ## What blocks what
@@ -323,7 +424,8 @@ indirect expansion, which zsh rejects, so it runs under either.
 
 The two branches off `map` are genuinely independent and **may be run
 concurrently** — the export takes about 3½ hours and the tree branch does not
-touch turbopuffer, so overlapping them roughly halves the release. The numbered
+touch turbopuffer, so overlapping them takes the tree branch off the clock
+entirely (about 37 minutes — see *How long it takes*). The numbered
 steps below are written in series because that is easier to follow when something
 goes wrong; if you overlap them, the binding rule is the one stated below: **step 5
 must be complete before step 8**. Finishing it before the export finishes is the easy
@@ -357,18 +459,27 @@ Four ordering rules, each with a real failure behind it:
 | --- | --- | --- |
 | 1 scan | 30 s | 2026-08-26 |
 | 2 map | 7.6 s | 2026-08-26 |
-| 3 publish | **not measured** — record it | |
-| 4 gate (tree) | **not measured** — record it; it walks ~16 M references | |
-| 5 upload to R2 | **not measured** — record it; 5.0 GiB, 11,750 files | |
+| 3 publish | 14 m 32 s | 2026-08-27 |
+| 4 gate (tree) | 14 m 08 s, walking 15,970,528 references | 2026-08-27 |
+| 5 upload to R2 | 8 m 48 s — **but see the caveat below** | 2026-08-27 |
 | 6 site export | 3 h 36 m at ~103 documents/s, ~29 GB uploaded, over 1,337,025 documents — a **floor**, since the corpus has grown since | 2026-08-20 |
 | 7 gate (namespace) | minutes | |
 | 8–11 | minutes, plus whatever the acceptance click-through takes | |
 
-**A release is therefore at least the export's 3 h 36 m**, and how much more depends
-entirely on the three unmeasured rows. Overlapping steps 3–5 with the export bounds
-the whole thing at roughly the export alone; running them in series adds an amount
-nobody has yet timed. Measure them on the next run and fill the rows in — until then,
-do not promise anyone a finish time.
+**The upload figure does not generalise, and must not be read as one.** On
+2026-08-27 only **12 of 11,750 files had changed**; the other 11,738 were
+byte-identical, so rclone merely refreshed their modification times. 8 m 48 s
+is the cost of that metadata pass over an unchanged tree. A release in which
+the rendered tree genuinely moves uploads gigabytes: the 2026-08-24 run moved
+the full 5.0 GiB. Whichever case you are in, the dry run in step 5 tells you
+before you commit to it.
+
+**A release is therefore at least the export's 3 h 36 m.** Steps 3, 4 and 5 in
+series added about 37 minutes on 2026-08-27, with the caveat above on step 5.
+Overlapping them with the export — the two branches off the map are genuinely
+independent — bounds the whole thing at roughly the export alone. The export's
+own figure is the one that moves: it is a floor, the corpus grows, and
+throughput is not steady (see step 6). Do not promise anyone a finish time.
 
 ## Rollback — read this before you start
 
@@ -379,7 +490,7 @@ three are spelled out under the table. Know which lever is which *before* you ne
 | --- | --- | --- |
 | Every search returns `upstream` 502 | The Worker cannot reach or use the namespace it points at (bad namespace name, bad `[vars]`, an upstream outage) | Put the previous namespace name AND its `ROWS`/`ENTITIES`/`BUILT` back in `wrangler.toml` and deploy — reverting step 8's commit is the reliable way. Seconds. **Traps 1 and 3 both apply.** |
 | Searches work, results wrong or entities missing | The index | Same: revert step 8's commit, deploy. Seconds. **Traps 1 and 3 both apply.** |
-| Search works, source links 404 or land on the wrong line | The published tree | `rclone sync published.<previous date> R2:isasearch/source` — **`sync`, not `copy`**, so that pages only the new tree has are removed; dry-run and read the deletions first. Then purge the zone cache. ~5 GB, so minutes, not seconds. |
+| Search works, source links 404 or land on the wrong line | The published tree | Re-upload the previous tree with **`sync`, not `copy`**, so pages only the new tree has are removed — step 11's prune shows the two-command shape, and the `--dry-run` pass is not optional here either. Needs step 5's six `RCLONE_*` exports. Then purge the zone cache. ~5 GB, so minutes, not seconds. |
 | Pages render wrong, search results fine | Worker code | Revert the code commits only, keeping this release's `wrangler.toml` `[vars]`, then deploy. Trap 2 has the recipe, and says why `wrangler rollback` is wrong here. |
 
 **Every row above ends with a zone-cache purge** (step 9's procedure — human-only).
@@ -409,11 +520,24 @@ bug must not be fixed with a version rollback. The recipe, keeping this release'
 data pointer and its numbers:
 
 ```bash
-git revert --no-commit <the code commits — not step 8's wrangler.toml commit>
-git checkout HEAD -- worker/wrangler.toml       # keep the namespace and its numbers
+git revert --no-commit CODE_COMMITS      # NOT step 8's wrangler.toml commit
+git show HEAD:worker/wrangler.toml > worker/wrangler.toml   # keep the namespace
+git add worker/wrangler.toml                                # AND stage it
 git commit -m "Revert <what>; keep this release's namespace and [vars]"
 (cd worker && source ~/Current/MLML/secret.sh && npx wrangler@4 deploy)
 ```
+
+**The `git add` is not optional.** `git revert --no-commit` stages its inverse
+in the index, so if any reverted commit touched `worker/wrangler.toml` — the
+only reason this recipe exists — the index already holds the reverted `[vars]`.
+The redirect rewrites the working tree only; without staging it, the plain
+`git commit` commits the index and takes `TPUF_NAMESPACE` back with it, which is
+exactly what this trap exists to prevent. The deploy would still be right, and
+the recorded sha would not describe it — step 11's last check would then fire.
+
+**`git show … > …` rather than `git checkout HEAD -- …`** on purpose: this is a
+shared working tree, and the repository's standing rules forbid `git checkout`
+because it discards other people's uncommitted work without saying so.
 
 **Trap 3: a namespace rollback across a schema epoch must take the Worker code
 with it.** The regex-era Worker compiles every condition to a `Regex` filter, and
@@ -440,7 +564,8 @@ environment is the one set up here:
 
 ```bash
 cd ~/Current/MLML/contrib/isasearch-web
-source ~/Current/MLML/secret.sh
+source ~/Current/MLML/envir.sh                 # Isabelle on PATH — steps 1, 2b
+source ~/Current/MLML/secret.sh                # and 6 die without it
 WORK=~/isasearch-pipeline && mkdir -p $WORK    # durable; NEVER /tmp, which is
                                                # memory-backed on this machine
 TODAY=$(date +%Y%m%d)      # fix this ONCE; reuse the literal value everywhere
@@ -463,10 +588,10 @@ sha, because everything below that asks "did X change since the last release?" m
 "since that commit":
 
 ```bash
-tail -150 pipeline/HANDOVER-review3.md        # the previous release's block — it is
-                                             # long, so page it rather than trust -n
-(cd worker && npx wrangler@4 deployments list | head -20)
-LAST=<the commit sha from the log>
+less pipeline/HANDOVER-review3.md            # the previous release's block is at
+                                             # the END; page it rather than guess -n
+(cd worker && npx wrangler@4 deployments list | tail -30)   # newest is LAST
+LAST=abc1234                                   # the sha from the release log
 git log --oneline $LAST..HEAD                  # everything this release ships
 grep TPUF_NAMESPACE worker/wrangler.toml       # the live namespace, BEFORE you edit it
 ```
@@ -518,7 +643,7 @@ python src/site_source_pages.py scan --out $WORK/scan-$TODAY.json
 ```
 
 The semantic DB is found through the installed package, not named on the command
-line; precondition 1 is what pins which one.
+line; precondition 2's venv check is what pins which one.
 
 **Success looks like** a counts block followed by
 `wrote <path> (content hash …): N record(s), M linkable position file(s), K needed
@@ -528,14 +653,17 @@ final line**, 9,818 linkable position files, 486,655 pairs.
 **This line prints a content hash too, and it is not the one you want** — it seals the
 scan. The hash every later step re-checks is step 2's.
 
-**Two different record numbers are printed, and only one matters downstream.** The
-counts block's `records` line is the shippable records — it already excludes
-work-in-progress keys and the per-theory cost records, exactly as step 6's does, so it
-is not a walk total; the final line's `N record(s)` is what survived the remaining
-filters, and that is exactly the set the export
-publishes — the scan and the export share one generator so they cannot disagree about
-it. **Write down the final line's N**: step 6's `exported` and step 7's row check are
-both against that number.
+**Two different record numbers are printed, and you need both — for different
+things.** The counts block's `records` line is the shippable records: it already
+excludes work-in-progress keys and the per-theory cost records, exactly as step 6's
+does, so it is not a walk total. The final line's `N record(s)` is what survived the
+remaining filters, and that is exactly the set the export publishes — the scan and
+the export share one generator, so they cannot disagree about it.
+
+**Write both down.** The final line's `N` is what step 6's `exported` and step 7's
+row check are measured against. The counts block's `records` is what precondition
+8's recovery compares the completeness gate's own denominator against, if that gate
+ever fires — and by then this scrollback may be gone.
 
 **Judging the numbers:** the record count is the current corpus and will differ —
 it grew by 4,834 in three days in August 2026. The other two move slowly. **None of
@@ -575,6 +703,65 @@ theory recovered independently from the key prefixes of that file's name-address
 entities. A clean exit means all three held. The linked percentage is *not*
 machine-checked and has no floor.
 
+### 2b. The rehearsal — optional, about ten minutes
+
+Skip it on a release that changes no code. It earns its ten minutes when the
+export code, the schema or the Worker changed, because it exercises the real
+record stream, real vectors and the real query path where a mistake costs
+minutes instead of hours.
+
+**Numbered 2b because it must run after step 2** — it reads the map artefact —
+and it must finish before step 6 starts, or it is not rehearsing anything. It
+reads the semantic DB and writes turbopuffer, so precondition 3 is untouched.
+
+```bash
+TURBOPUFFER_API_KEY="$turbopuffer_DEV_KEY" \
+python src/site_export.py \
+  --source-links $WORK/map-$TODAY.json \
+  --namespace isasearch-rehearsal-$TODAY \
+  --limit 2000 --skip-completeness-gate
+```
+
+`--namespace` writes into a name you choose, so the rehearsal cannot consume a
+generation number. **This is the only place `--skip-completeness-gate` is ever
+legitimate**, and only because a `--limit` run ships nothing.
+
+Then drive a local dev Worker against it — a curl straight at turbopuffer
+exercises no line of the router. `wrangler dev` holds its terminal, so use two,
+and **stop the server afterwards**:
+
+```bash
+(cd worker && npx wrangler@4 dev --local --port 8787)     # terminal 1, blocks
+```
+```bash
+# terminal 2
+curl -s -X POST http://127.0.0.1:8787/api/search -H 'content-type: application/json' \
+  -d '{"query":"a sorted list","conditions":[{"on":"expr","polarity":"contains","text":"sorted_wrt"}]}'
+```
+
+The dev Worker reads `worker/.dev.vars`, so pointing it at the scratch
+namespace means editing that file — and **`.dev.vars` is gitignored, so step
+0's "working tree is clean" check cannot see it.** Note what you change and put
+it back at step 11. Override `ROWS` there too if you want both router branches:
+the 3 % line is a fraction of it, so at `ROWS=2000` a condition matching more
+than 60 rows goes ANN and a narrower one kNN.
+
+**Delete the scratch namespace afterwards**, or it reaches step 11 as a
+mystery:
+
+```bash
+curl -s -w '\nHTTP %{http_code}\n' -X DELETE \
+  "https://aws-us-west-2.turbopuffer.com/v1/namespaces/isasearch-rehearsal-$TODAY" \
+  -H "Authorization: Bearer $turbopuffer_DEV_KEY"
+```
+
+`{"status":"ok"}` with `HTTP 200` is the pass — check it, because a bare `-s`
+lets a 401 or 404 scroll past looking like success. (`v1` here and `v2` in step
+11 both answer this call; the difference is not significant.)
+
+*Protects against:* discovering at hour four what a 2,000-document run would
+have shown in twenty seconds.
+
 ### 3. Publish the tree (§17.4)
 
 ```bash
@@ -610,9 +797,9 @@ whose several rendered copies differed and were combined by the id-union merge.
   pair count for *this* release: 486,655 on 2026-08-26, against 486,346 at the
   2026-08-24 publish.
 - The **page counts, the merged-conflict count, and the two tolerance counters publish
-  prints are tree-side** and move only when the rendered tree does. From the
-  2026-08-24 run: 10,595 theory pages, 1,139 auxiliary pages, 11 merged conflicts,
-  external references exempted 232, dangling anchors stripped 1. Those last two are
+  prints are tree-side** and move only when the rendered tree does. Identical on
+  the 2026-08-24 and 2026-08-27 runs: 10,595 theory pages, 1,139 auxiliary pages,
+  11 merged conflicts, external references exempted 232, dangling anchors stripped 1. Those last two are
   two of the three baselines step 4 checks properly — the third, inherited fragment
   misses, is a gate-only counter that publish does not print. The page and conflict
   counts are for your eye alone.
@@ -632,8 +819,9 @@ counters match `site/expected-counters.json` exactly. **That file is the authori
 as of 2026-08-26 it holds external references exempted 232, dangling anchors stripped
 1 entry, inherited fragment misses 106 pairs — quoted here for orientation, and stale
 the moment anyone legitimately runs `--update-counters`.
-**A counter mismatch fails the gate.** *Historical, for scale:* the 2026-08-24 run
-walked 15,970,528 references green with every baseline unchanged.
+**A counter mismatch fails the gate.** *Historical, for scale:* the 2026-08-24 and
+2026-08-27 runs both walked 15,970,528 references green with every baseline
+unchanged.
 
 This is the model for what a checkable step looks like: the baselines are committed,
 so the tool distinguishes "the corpus grew" from "something broke" without asking
@@ -679,10 +867,11 @@ delete later.**
 
 > **Read this before running the block below.** The exact invocation of the
 > 2026-08-24 upload was not recorded, and that upload went into an empty bucket, so it
-> never faced the question this step now answers. These commands are reconstructed
-> from the constraints that *were* recorded — which is why the dry run is not
-> optional. Once one release has gone through this file, record what actually ran (in
-> the release log, not as an edit made mid-release with a dirty working tree).
+> never faced the question this step now answers. The block below is what actually ran
+> on 2026-08-27, the first time these commands met a bucket that already held a tree:
+> 11,750 files, 12 of them changed, 8 m 48 s, exit 0, with `501 NotImplemented`
+> responses absorbed by retries. Record what you run each time (in the release log —
+> step 11 asks for it — not as an edit made mid-release with a dirty working tree).
 
 ```bash
 export RCLONE_CONFIG_R2_TYPE=s3
@@ -692,10 +881,44 @@ export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$R2_ISASEARCH_SECRET_ACCESS_KEY"
 export RCLONE_CONFIG_R2_ENDPOINT=https://532d99283b5aa1e02486ee3fdcb163d5.r2.cloudflarestorage.com
 export RCLONE_S3_NO_CHECK_BUCKET=true
 
-rclone copy published.$TODAY R2:isasearch/source --dry-run 2>&1 | head -40
+# 1. prove the destination BEFORE writing anything — read-only, costs nothing
+rclone lsf R2:isasearch --max-depth 1                # must print exactly: source/
+
+# 2. the dry run, to a file, then its two summaries
+rclone copy published.$TODAY R2:isasearch/source --dry-run > $WORK/r2-dryrun-$TODAY.txt 2>&1
+sed 's/.*: Skipped/Skipped/; s/ as --dry-run.*//' $WORK/r2-dryrun-$TODAY.txt | sort | uniq -c
+grep 'Skipped copy' $WORK/r2-dryrun-$TODAY.txt | sed 's/.*NOTICE: //; s/: Skipped copy.*//'
+
+# 3. the copy, then the completeness check
 rclone copy published.$TODAY R2:isasearch/source --transfers 32 --checkers 32 --progress
 rclone check published.$TODAY R2:isasearch/source --one-way
 ```
+
+**Redirect the dry run to a file; never pipe it into `head`.** `head` exits
+after its quota, rclone takes `EPIPE` and dies, and the truncated listing reads
+exactly like "nothing needs copying".
+
+**Read the two summaries the block prints.** The first counts the line types.
+`Skipped copy` is a file rclone would send over the wire — either because its
+content changed **or because the destination does not have it at all**;
+`Skipped update modification time` is a file rclone found byte-identical, where
+only the timestamp would move.
+
+The second names every file in that first category. On a data refresh the list
+should be short and should name theories you can account for: on 2026-08-27 it
+was 12 files of 11,750, exactly the 11 theory pages holding newly collected
+entities plus `publish-report.json`. Cross-check it with
+`diff -rq <the previous tree> published.$TODAY` if you want a second source.
+
+**So the file count alone cannot clear you**: a wrong prefix is an empty
+destination, and an empty destination reports all 11,750 files as `Skipped
+copy` — indistinguishable from a legitimately rebuilt tree. That is why the
+block proves the prefix first, before anything is written.
+
+**Check the dry run ran at all** — the histogram cannot tell a clean run from a
+failed one, because an error line is simply another line type:
+`grep -ci error $WORK/r2-dryrun-$TODAY.txt`, and read the file's tail for
+rclone's transfer summary. No summary means no dry run.
 
 **`copy`, not `sync`, and that is deliberate** (ruled 2026-08-26). `sync` would delete
 every object under `source/` that is absent from the local tree. Those deletions are wanted
@@ -708,22 +931,35 @@ mistyped path here recoverable.
 **The dry run shows scale, not destination.** rclone names each file by its path
 *relative to the source*, so the lines read `HOL.List.html: Skipped copy …` and never
 name the key it would be written to. Use it to confirm the file count looks like a
-published tree — then prove the prefix separately, right after the copy and **before
-step 8**, while a mistake is still harmless:
+published tree. Proving the *destination* is a separate act, and the block above
+does its first half before the copy. Complete it right after the copy and
+**before step 8**, while a mistake is still harmless:
 
 ```bash
-rclone lsf R2:isasearch --max-depth 1           # must print exactly: source/
-rclone lsf R2:isasearch/source --max-depth 1 | head
+rclone lsf R2:isasearch --max-depth 1                       # exactly: source/
+rclone lsf R2:isasearch/source --max-depth 1 --dirs-only    # exactly: _aux/ fonts/
+rclone lsf R2:isasearch/source --max-depth 1 --files-only \
+  --include '{index.html,isabelle.css,publish-report.json}'  # all three
 ```
 
-The first must show `source/` and nothing beside it; the second must show theory pages
-at the top level (`Abel_Limit_Theorem.…html`) alongside `_aux/`, `fonts/`,
-`index.html`, `isabelle.css`, and the run's `publish-report.json`, which rides along
-harmlessly — not a nested `source/`, and not a `published.<date>/`.
-A wrong prefix is 11,750 stray objects: caught here it costs one `rclone purge` of the
-bad prefix, caught after step 8 it is every source link 404ing. **`rclone check
---one-way` cannot catch it**, because it is handed the same destination string the copy
-used.
+**Do not pipe these through `head`.** The prefix lists ~11,750 objects
+lexicographically and every theory page starts with an upper-case letter, which
+sorts ahead of `_aux/`, `fonts/` and the lower-case files — so `| head` shows
+ten `A…` pages and none of the entries you are checking, while looking like a
+pass.
+
+They prove: `source/` alone at the bucket root; `_aux/` and `fonts/` as the
+only directories under it, **not** a nested `source/` or a `published.<date>/`;
+and the three files present. `publish-report.json` rides along harmlessly — it
+becomes fetchable at `/source/publish-report.json` and discloses nothing the
+tree does not.
+
+A wrong prefix is 11,750 stray objects: caught here it costs one `rclone purge
+R2:isasearch/<the wrong prefix>` — **name the wrong prefix, never
+`R2:isasearch` and never `R2:isasearch/source`, either of which destroys the
+live tree** — and caught after step 8 it is every source link 404ing.
+**`rclone check --one-way` cannot catch it**, because it is handed the same
+destination string the copy used.
 
 **`RCLONE_S3_NO_CHECK_BUCKET=true` is mandatory.** A bucket-scoped token cannot
 `HeadBucket` or `CreateBucket`; without the flag rclone makes that probe, gets a
@@ -754,19 +990,28 @@ log** — not in a shell you might lose, and never with the output going nowhere
 
 ```bash
 tmux new -s export        # or screen; anything that survives a dropped connection
-# inside it, re-establish the environment — a fresh shell has none of it:
+# inside it, re-establish the environment — a fresh shell has none of it.
+# BOTH source lines: the export needs Isabelle on PATH (precondition 2).
 cd ~/Current/MLML/contrib/isasearch-web
+source ~/Current/MLML/envir.sh
 source ~/Current/MLML/secret.sh
 set -o pipefail          # without it, `| tee` below hides the exit status
 WORK=~/isasearch-pipeline
-TODAY=<the same date you used in steps 1-2>     # NOT $(date): a release can cross
-                                                # midnight and the file names would move
+TODAY=20260827           # EXAMPLE. Type the SAME literal you used in steps 1-2.
+                         # NOT $(date): a release can cross midnight, and then
+                         # $(date) names files this release never wrote
 TURBOPUFFER_API_KEY="$turbopuffer_DEV_KEY" \
-python src/site_export.py \
+python -u src/site_export.py \
   --source-links $WORK/map-$TODAY.json \
   --checkpoint $WORK/site-export-$TODAY.checkpoint.json \
   2>&1 | tee -a $WORK/export-$TODAY.log     # -a so a resumed run appends
 ```
+
+**`python -u` is load-bearing, not a flourish.** Python block-buffers stdout
+when it is a pipe, so without it the log lags reality by tens of minutes — it
+ran about fifty minutes behind on 2026-08-27 — and the "ten minutes of silence"
+rule below becomes unusable, because you cannot tell buffering from a stall.
+`PYTHONUNBUFFERED=1` in the environment does the same job.
 
 **`| tee` hides the exit status**, so run `set -o pipefail` in that shell first (zsh
 and bash both honour it); without it `$?` is `tee`'s and reads 0 even when the export
@@ -774,8 +1019,16 @@ died. Then read the namespace off the log — it is the lowest free generation n
 line reading `namespace <name>`:
 
 ```bash
-grep -m1 '^\[site-export\] namespace ' $WORK/export-$TODAY.log
+grep '^\[site-export\] namespace ' $WORK/export-$TODAY.log | tail -1
 ```
+
+**`tail -1`, not `grep -m1`.** The log is opened with `tee -a` so that a resumed
+run appends, so any second attempt leaves two `namespace` lines in one file and
+`-m1` returns the **first**. Usually both name the same namespace — a plain
+resume keeps it, see *Interruption is safe* below. They differ exactly when the
+first attempt never got one (it stopped on a gate) or when the checkpoint was
+deleted, and in that second case the first line names a stranded namespace that
+step 11 must delete. The last line is always the run you are in.
 
 **Write that name down**; steps 7 and 8 need it, and step 11 needs it next time.
 
@@ -785,8 +1038,11 @@ Before writing anything it runs two gates of its own:
   billed write;
 - the **completeness gate**: every shippable entity has a vector. The vector store
   is a lazy cache and holes are legal in ordinary operation, so this must fail loudly
-  rather than ship a corpus with gaps. `--skip-completeness-gate` exists for a
-  `--limit` smoke test and for nothing else; never pass it on a release.
+  rather than ship a corpus with gaps. `--skip-completeness-gate` exists for step
+  2b's `--limit` rehearsal and for nothing else; never pass it on a release.
+  **If it fires, precondition 8 has the remedy** — the offline backfill command,
+  why running it does not violate precondition 3, and the one comparison that
+  decides whether steps 1 to 5 still stand.
 
 (The third gate that ran here — D46's asset comparison — retired 2026-08-26 with
 the tokenizer.)
@@ -806,20 +1062,82 @@ where you resume from. Progress lines appear roughly every ten batch groups with
 elapsed time and a rate — the condition is a modulo on the running document count, so
 a short batch can skip one. A gap in them is not by itself evidence of a stall.
 At the measured rate one lands roughly every 100 seconds, so treat **ten minutes of
-silence** as the moment to go and look — at the log's tail, and at whether the process
-is still alive — rather than as proof of either state.
+silence** as the moment to go and look — rather than as proof of either state.
 
-The seven counts, and what they mean, since none of them is otherwise explained:
-`records` the shippable records — persistent and not work-in-progress; `wip` and the
-per-theory cost records are **not** inside it, they are counted (or skipped) before it,
-so the categories do not sum to a walk total; `undecodable` records whose text would not decode
-(expect 0); `wip` work-in-progress keys, rejected before `records` is counted;
-`experience` EXPERIENCE records,
-never published; `out of scope` records D24's session test excludes; `exported` what
-actually shipped — **this should equal step 1's final-line record count**; `no defining theory`
-records that resolve to `''` and match no Theory Name condition (533 at the 2026-08-26
-measurement, 0.04 %). Only `exported` has a downstream check. If any of the others has
-moved by an order of magnitude, find out why before deploying.
+**When you look, do not look at the log.** Even with `python -u` the log is the
+weakest evidence available, and without it the log is actively misleading. Two
+things are authoritative, and both are live.
+
+You are necessarily in a *different* shell from the export — tmux is holding
+that one — so re-establish `WORK`, `TODAY` and `source ~/Current/MLML/secret.sh`
+here first, or the checkpoint path collapses to `/site-export-.checkpoint.json`
+and the query sends an empty bearer token.
+
+```bash
+# 1. the exporter's own progress record — see "Sample generously" below
+python -c "import json;print(json.load(open('$WORK/site-export-$TODAY.checkpoint.json'))['documents'])"
+
+# 2. the rows actually in the namespace
+NS=$(grep '^\[site-export\] namespace ' $WORK/export-$TODAY.log | tail -1 | awk '{print $NF}')
+curl -s -X POST "https://aws-us-west-2.turbopuffer.com/v2/namespaces/$NS/query" \
+  -H "Authorization: Bearer $turbopuffer_DEV_KEY" -H 'Content-Type: application/json' \
+  -d '{"queries":[{"aggregate_by":{"n":["Count","id"]}}]}'
+```
+
+If the checkpoint's `documents` advances between two samples, the export is
+alive and the silence was buffering or a slow patch, whatever the log says.
+The namespace count is the second opinion, and its `last_included_write_at`
+tells you when a write last landed.
+
+**Sample generously.** The checkpoint is written per batch group, not per
+document, so at a degraded rate one minute can legitimately show no movement.
+Take three samples five minutes apart before concluding anything.
+
+**Stop waiting** only when `documents` has not moved across three such samples
+*and* `last_included_write_at` predates the first: that is wedged, not slow.
+Then `tmux attach -t export`, Ctrl-C, and re-run the identical command. The
+cost is bounded by one batch group — the namespace is kept, no generation
+number is burned, steps 1-5 are untouched — and a fresh connection often clears
+backpressure a wedged one will not.
+
+**Retries are not a stall.** A failed upsert is retried five times with a
+growing delay, logged as `retrying in Ns (k/5)`. `write operation timed out`,
+TLS `EOF occurred in violation of protocol` and turbopuffer's `HTTP 408` all
+appeared on 2026-08-27 and were all absorbed. Read the ladder, not the count:
+
+| what you see | what it means |
+| --- | --- |
+| many `(1/5)`, no higher | noise; the first retry keeps winning |
+| `(2/5)`, `(3/5)` | the upstream write path is degraded, throughput drops, still self-correcting |
+| `(4/5)`, `(5/5)` | this batch is about to fail, and a failed batch ends the run — safely, see **Interruption is safe** above |
+
+No line says which batch it belongs to, so several workers at `(1/5)` look like
+one worker climbing; the ladder corroborates, the checkpoint decides.
+
+Throughput is not steady. The 2026-08-27 run went 209 documents/s, then ~136/s,
+then roughly 10/s for a stretch while turbopuffer's write path degraded, then
+recovered. Reads stayed fast throughout — that is how you tell an upstream
+write problem from a dead link.
+
+The seven counts, since none of them is otherwise explained:
+
+| count | what it is |
+| --- | --- |
+| `records` | the shippable records — persistent, not work-in-progress |
+| `undecodable` | records whose text would not decode; expect 0 |
+| `wip` | work-in-progress keys, rejected *before* `records` is counted |
+| `experience` | EXPERIENCE records, never published |
+| `out of scope` | records D24's session test excludes |
+| `exported` | what actually shipped — **should equal step 1's final-line record count** |
+| `no defining theory` | records resolving to `''`, matching no Theory Name condition (533 at the 2026-08-26 measurement, 0.04 %) |
+
+**They do not sum to a walk total.** `wip` and the per-theory cost records are
+counted or skipped *before* `records`, so they sit outside it rather than inside.
+
+Only `exported` has a downstream check. If one of the others has moved by an
+order of magnitude, find out why before deploying — and note that `undecodable`,
+whose expected value is 0, has no order of magnitude: any non-zero value there is
+the thing to investigate.
 
 At the end of a full run the export prints its **REPORT block** — the four
 `wrangler.toml [vars]` lines, ready to paste:
@@ -849,7 +1167,7 @@ TURBOPUFFER_API_KEY="$turbopuffer_ISASEARCH_READ_KEY" \
 python src/site_source_pages.py gate \
   --published published.$TODAY \
   --artefact $WORK/map-$TODAY.json \
-  --namespace <the namespace from step 6> \
+  --namespace isasearch-...  `# from step 6's REPORT` \
   --sample 1000
 ```
 
@@ -882,8 +1200,8 @@ It re-runs step 4's tree-side checks as well, since it is the same tool with the
 mark that is not there — the index and the tree were built from **different
 artefacts**, which is exactly what this step exists to catch. Adjust nothing: check
 that the artefact hash step 6 recorded is the one step 3 published under, and re-run
-whichever of the two used the wrong one. (Step 4's "do not upload" advice does not
-apply here; the upload already happened at step 5.)
+whichever of the two used the wrong one. (The "do not upload" advice in *When something
+fails* does not apply here; the upload already happened at step 5.)
 
 **If the row count fires**, the namespace is short and there is no override: go back
 to step 6 and let the export finish. The usual causes are a run that was interrupted
@@ -903,10 +1221,29 @@ it has run. It is also the per-release re-establishment of the approximate
 branch's guarantee — the ANN overlap is a property of each index build, not of
 the design.
 
+```bash
+TPUF_NAMESPACE=isasearch-...    \
+ROWS=1234567                    \
+TURBOPUFFER_API_KEY="$turbopuffer_ISASEARCH_READ_KEY" \
+FIREWORKS_API_KEY="$EMBEDDING_API_KEY" \
+node worker/probe/launch_gate.mjs
+```
+
+Both of the first two come from step 6's REPORT block.
+
+**Success is exit status 0**, the same criterion as steps 4 and 7.
+
+It imports the Worker's own `compileRequest`, `tupfQueryBody`, `tupfCountBody`,
+`routeOf` and `certified`, so the sweep measures the filters the router will
+actually send rather than a hand-written imitation of them. It prints one row
+per pattern, then a `PASS`/`FAIL` line per pass condition below, then a JSON
+record to paste into the release log; it exits non-zero if any condition
+failed. `ROWS` is passed in because the 3 % line is a fraction of it, and at
+this point in the release `wrangler.toml` still holds the *previous*
+namespace's number.
+
 What it measures, against the step-6 namespace, read-only (the pattern shapes
-are §6.3c's "The 3 % line" paragraph; adapt the scripts under
-`~/isasearch-pipeline/regexprobe/` — `rawprobe/probe.py` has the request
-idioms):
+are §6.3c's "The 3 % line" paragraph):
 
 - semantically clustered patterns, a no-literal length shape, a common-literal
   shape, and a CTS-equivalent differential control — recording, per pattern:
@@ -917,14 +1254,41 @@ idioms):
   ~6,800 empty-`expr` rows, and does any plausible pattern match the empty
   string?
 
-**Pass**: every full-200 ANN result above the 3 % line overlaps its kNN truth
-by ≥ 195/200; no under-filled ANN result at or above the line fails to trigger
-the fallback certificate; fallback-kNN latency fits the 15 s deadline with
-margin; the empty-value behaviour matches what the Worker assumes (empty
-patterns are rejected client- and Worker-side, so only `Not` can reach the
-empty rows). **A miss on any of these is a design input, not a tolerance**:
-raise the line, resize a deadline (both live in `wrangler.toml [vars]`) or stop
-and re-open §6.3c — record what was measured either way, in the release log.
+**These four block the release.** The probe exits non-zero if any fails:
+
+1. every kNN result satisfies the certificate `rows == min(count, top_k)`;
+2. no under-filled ANN result at or above the line fails to trigger the
+   fallback certificate;
+3. **fallback-kNN latency fits the 15 s deadline** — the deadline a real
+   visitor's fallback sits behind, so you want the slowest leg well under it,
+   not just under it;
+4. the empty-value behaviour matches what the Worker assumes — empty patterns
+   are rejected client- and Worker-side, so only `Not` can reach the empty rows.
+
+A miss on any of those is a design input, not a tolerance. Two knobs exist, both
+`[vars]` in `worker/wrangler.toml`: **`EXACT_FRACTION`** is the 3 % line and
+**`DEADLINES_MS`** the deadline table. If you move either, re-run this sweep and
+let the changed line ride in step 8's commit.
+
+**The ANN∩kNN set overlap is recorded, not enforced** (ruled 2026-08-28). It
+fails on the filter's shape, not the data: `excludes` matches nearly the whole
+corpus by construction (`expr !~ sorted` is 99.59 %), so it is above any line,
+and ANN swaps tied rows freely. Measured 2026-08-27, two negations scored
+179/200 and 183/200 with a similarity gap of **0.0000 and 0.0027** — different
+rows, identical quality. Red on every correct release is not a gate.
+
+**Score parity replaced it**, measuring what set identity stood in for: was the
+visitor shown a result materially worse than the best available at that rank.
+**Top-10 within 0.005, top-100 within 0.01** (2026-08-27: worst 0.0015, 0.0052).
+
+Two cautions. The thresholds are absolute cosine gaps and **do not transfer
+across queries** — bands here run 0.48 to 0.81, so "similarity ≥ 0.5" would mean
+all 200 rows for one query and the top hundred for another. And the verdict
+follows the battery: the same no-literal shape measured 0.0052 under one query
+and **0.0322** under another, so a new shape needs the queries that stress it.
+
+Record every figure in the release log regardless — the overlap numbers are the
+per-build evidence §6.3c asks for.
 
 ### 8. Deploy the Worker (§8.2)
 
@@ -959,7 +1323,7 @@ version went out, not *which commit* it was built from; the tie between them is 
 record you write in step 11.
 
 ```bash
-(cd worker && npx wrangler@4 deployments list | head -5)
+(cd worker && npx wrangler@4 deployments list | tail -20)   # newest is LAST
 ```
 
 Switching the site onto the new data *is* this deployment; there is no other
@@ -1024,13 +1388,26 @@ origin — but say so rather than surprise anyone relying on it.
 `MISS` to `HIT`:
 
 ```bash
-for i in 1 2; do curl -sI https://isabelle-semantics.qiyuan.me/source/HOL.List.html \
+PAGE=Some_Entry.Some_Theory.html     # pick one from the middle of the index;
+                                     # NOT HOL.List.html — see below
+for i in 1 2; do curl -s -o /dev/null -D - \
+  "https://isabelle-semantics.qiyuan.me/source/$PAGE" \
   | grep -i '^cf-cache-status'; done
 ```
 
-If the *first* fetch already says `HIT`, that is not proof the purge failed — someone
-or something may have refilled that page in between. Try a page nobody would have
-touched (any theory from the middle of the index) before concluding anything.
+**A real GET, not `curl -I`.** A HEAD request does not reliably populate
+Cloudflare's edge cache, so `-I` can answer `MISS` twice on a perfectly healthy
+zone and read as a failed purge.
+
+**And not a popular page.** `HOL.List.html` and its like are the likeliest to
+have been refilled between the purge and your check, by a passing visitor or by
+your own step 10 click-through — which is why `PAGE` above is something nobody
+would have visited.
+
+**The pass is `MISS` then `HIT`.** A first fetch that already says `HIT` is
+inconclusive rather than a failure: try another untouched page. Two `MISS`es on
+a real GET means the purge did not take — do it again before step 10, because
+step 10's whole point is to see what a visitor sees.
 
 *Protects against:* a source page from the old tree being served against a link from
 the new index — the exact shape of "the release looked fine for four hours".
@@ -1049,12 +1426,20 @@ is what a visitor gets. **Your own browser is the one cache the purge cannot cle
    REPORT numbers. **The count is not `exported`** and must not be compared with
    it: `ENTITIES` counts *distinct entities*, which collapses each theorem and
    its derived-rule twin into one, so it runs about 8 % below the row count
-   (1,230,467 entities against 1,337,009 rows on the 2026-08-20 corpus). What to
+   (1,230,467 entities against 1,337,009 rows in the committed artefact —
+   the 2026-08-20 export's own figure was 1,337,025, sixteen twin rows higher). What to
    check is that the page shows **exactly the configured values** — the probe
    below asserts it mechanically with `SITE_URL` — and that the build date is
-   today's. Fetch it fresh — this page is browser-cached for an hour and is
-   *not* in the edge cache, so your own browser is the likeliest source of a
-   stale reading: `curl -s https://isabelle-semantics.qiyuan.me/about | grep -A2 -i entities`.
+   the one the export stamped. On a release that crossed midnight that is
+   yesterday's date, and that is correct, not a fault.
+
+   Fetch it fresh: this page is browser-cached for an hour and is *not* in the
+   edge cache, so your own browser is the likeliest source of a stale reading.
+
+   ```bash
+   curl -s https://isabelle-semantics.qiyuan.me/about \
+     | grep -iE 'entit|built|[0-9]{4}-[0-9]{2}-[0-9]{2}'
+   ```
 3. **One entity page.** Take the link from any result card in check 1. Confirm the
    statement, the `Defined in` line, the source link, and the ten nearest entities.
 4. **One source link clicked through** to `/source/<theory>.html#L<n>`, landing on
@@ -1084,9 +1469,13 @@ is what a visitor gets. **Your own browser is the one cache the purge cannot cle
    window; six serial round trips usually do. If you see six `200`s, retry in parallel
    (`for i in $(seq 6); do curl … & done; wait`) before concluding anything — and if it
    still does not fire, that is an abuse-protection regression, not a data problem: it
-   does not block the release, but raise it the same day. The sixth should be `429`;
-   add `-o -` to see `{"error":{"code":"burst_limit","layer":"edge"}}`. Fonts and
-   pages must be unaffected — the rule is scoped to `/api/search` alone.
+   does not block the release, but raise it the same day. The sixth should be `429`.
+   Fonts and pages must be unaffected — the rule is scoped to `/api/search` alone.
+
+   To see the body `{"error":{"code":"burst_limit","layer":"edge"}}`, **replace**
+   `-o /dev/null` with `-o -`; do not add it. curl binds `-o` targets to URLs
+   positionally, so a second `-o` on a single-URL command is ignored and the body
+   still goes to `/dev/null`.
 
 7. **The count router (plan §6.3c).** Two checks through `/api/search` — a curl
    straight at turbopuffer exercises no line of the router and passes even when
@@ -1107,7 +1496,7 @@ certificate on both rank modes, the `Not(Regex)` complement, the engine-message
 shape and (with `SITE_URL`) the `/about` values:
 
 ```bash
-TPUF_NAMESPACE=<the namespace> \
+TPUF_NAMESPACE=isasearch-...    \
 TURBOPUFFER_API_KEY="$turbopuffer_ISASEARCH_READ_KEY" \
 FIREWORKS_API_KEY="$EMBEDDING_API_KEY" \
 SITE_URL=https://isabelle-semantics.qiyuan.me \
@@ -1168,9 +1557,11 @@ whose ordering can no longer be reconstructed. The bullets below say what the bl
 must contain — write it, then come back here.
 
 Then delete, by name: every namespace older than the two you are keeping, plus any
-abandoned run. **This is the only irreversible action in the release** — there is no
+abandoned run. **This is the sharpest irreversible action in the release** — there is no
 undo, and deleting the wrong name destroys the rollback you may need ten minutes
-later. Write the names into the script by hand, read them back against the listing
+later. It is not the only one: the R2 prune further down this step deletes
+objects permanently too, and Trap 1 explains why that one bites across a corpus
+generation. Write the names into the script by hand, read them back against the listing
 and the release log, and have a second person confirm them before running it:
 
 ```bash
@@ -1184,12 +1575,15 @@ DOOMED = ['isasearch-...', 'isasearch-....asset']   # fill in; nothing else
 
 # Guards, because the alternative mitigation is care, and the paragraphs above explain
 # why care is not enough here: the names are recycled, so the wrong one looks right.
-protected = {LIVE, KEEP, LIVE + '.asset', KEEP + '.asset'}
-clash = set(DOOMED) & protected
-assert not clash, f'REFUSING — these are live or the rollback: {clash}'
 existing = set(se.list_namespaces('isasearch-', region=se.DEFAULT_REGION,
                                   key=se.api_key()))
-missing = protected - existing
+# Only a pre-2026-08-26 namespace has an .asset companion.  Protect one when it
+# exists; REQUIRING it would refuse every release from now on.
+protected = {LIVE, KEEP} | {n + '.asset' for n in (LIVE, KEEP)
+                            if n + '.asset' in existing}
+clash = set(DOOMED) & protected
+assert not clash, f'REFUSING — these are live or the rollback: {clash}'
+missing = {LIVE, KEEP} - existing
 assert not missing, f'REFUSING — these should exist and do not: {missing}'
 
 print('to delete, permanently:')
@@ -1218,22 +1612,35 @@ already-consumed heredoc and die.)
 
 `se.request` raises on any status it does not accept, so reaching `deleted <name>`
 means the call succeeded. Confirm anyway by re-running the listing above: what you
-deleted should be gone, and the four names you kept should remain.
+deleted should be gone, and every name in `protected` should remain.
 
 Then:
 
 - **Prune the R2 bucket** — the deletions step 5 deliberately deferred. Now that the
-  new index is live and accepted, objects the new tree does not contain are dead, and
-  removing them is safe. Re-export the `RCLONE_*` variables from step 5, then:
+  new index is live and accepted, objects the new tree does not contain are dead.
+  Removing them is safe *because the local `published.<previous date>` is still on
+  disk*: that tree, not R2, is the source-page rollback from here on (Trap 1).
 
-  Check `$TODAY` still holds this release's date before running this — hours have
-  passed, this is probably a new shell, and a stale value prunes R2 to an older tree.
+  This is probably a new shell, hours later, so re-establish `$WORK`, the
+  `RCLONE_*` exports from step 5, and — most importantly — check that `$TODAY`
+  still holds **this** release's date. A stale `$TODAY` prunes R2 down to an
+  older tree.
 
   ```bash
+  # the dry run, kept as the record of what you approved
   rclone sync published.$TODAY R2:isasearch/source --dry-run 2>&1 \
-    | grep -i delete | tee $WORK/prune-$TODAY.txt | tail -20
-  grep -c 'Skipped delete' $WORK/prune-$TODAY.txt   # the deletions alone; the file
-  ```                                                # also holds rclone's summary line
+    | tee $WORK/prune-$TODAY.txt | grep -i delete | tail -20
+  # the true count, unaffected by the tail -20 above
+  grep -c 'Skipped delete' $WORK/prune-$TODAY.txt
+  ```
+
+  Then, and only after reading it, the real thing — **to a different file**, so
+  the list you approved survives:
+
+  ```bash
+  rclone sync published.$TODAY R2:isasearch/source 2>&1 \
+    | tee $WORK/prune-$TODAY.done.txt | tail -20
+  ```
 
   **rclone logs to stderr**, which is why `2>&1` is there — without it the pipe is empty
   and you would read a blank screen as "nothing to delete". At default verbosity
@@ -1242,14 +1649,20 @@ Then:
   line is the total. The `grep` isolates them; read the raw output too, it is only a few
   lines.
 
-  **Read the deletion list.** A handful, naming theories you know left the AFP, is
-  right; hundreds means the local tree is not the one you uploaded, and you should
-  stop rather than run the real `sync`. If the list is empty, nothing was removed
-  this release and there is nothing to do. Otherwise run the same command without
-  `--dry-run`, then purge the zone cache a second time.
+  **Read the deletion list before running the second command.** A handful, naming
+  theories you know left the AFP, is right; hundreds means the local tree is not
+  the one you uploaded — stop, and do not run the real `sync`. If the list is
+  empty, nothing was removed this release and there is nothing to do at all. When
+  the real `sync` does delete something, purge the zone cache a second time.
 
 - **Delete the published tree two releases old**, keeping the one you just replaced
   (`ls -d published*`). It is the source-page rollback until the next release.
+- **Put `worker/.dev.vars` back** if step 2b's rehearsal pointed it at a scratch
+  namespace (`TPUF_NAMESPACE`, and `ROWS` if you overrode it). The file is
+  gitignored, so nothing in this release will remind you: no `git status` shows
+  it, and the tests do not read it. Left as it is, the next person to run a
+  local dev Worker gets a namespace that no longer exists and a router
+  denominator nearly three orders of magnitude wrong.
 - **Copy this release's artefacts into the repository** and commit them — they live
   in `$WORK` while the release runs, and in `pipeline/` afterwards, which is what
   pins the live namespace to a scan and a map:
@@ -1267,9 +1680,15 @@ Then:
 - **Append a block to `pipeline/HANDOVER-review3.md`**, this project's release log:
   the namespace, the artefact content hash, the deployed Worker version, **the commit sha you deployed** — step 0 of
   the next release bounds its history with it — the published-tree directory name, the figures observed at every
-  step — including the three timings this document does not yet have — and anything
-  that surprised you. Append it at the **end** of the file, so that step 0 of the next
+  step, and anything that surprised you. Three of those are asked for in the middle
+  of the release and are the ones that get lost, so they are named here too:
+  **the step-5 `rclone` invocation you actually ran**, **step 7b's JSON record**, and
+  **step 6's REPORT block**. Append it at the **end** of the file, so that step 0 of the next
   release finds it where this document says it will be.
+- **Restart whatever precondition 3 made you stop** — the RPC host, the REPL
+  server, any collection job. The release stopped them and nothing else will
+  put them back; a finished release that leaves the semantic-DB pipeline down
+  is not finished.
 - **Push to `origin`**, and to `origin` only.
 
 ---
@@ -1291,7 +1710,7 @@ Not every change needs the whole pass. Step 0's preflight applies to all of them
   starts with a fresh scan and map: that rule exists because the *corpus* moves, and
   here it has not. The artefact hash and every composed `source_link` stay
   byte-identical by design, so the index does not move and steps 6–8 are not needed.
-  Two pieces of step 11 still apply: if the fix *removed* a page, run the prune (the
+  Three pieces of step 11 still apply: if the fix *removed* a page, run the prune (the
   `rclone sync` dry run and its deletion list), or R2 goes on serving what the tree no
   longer has; and this leaves a third `published.<date>` on disk, so drop the oldest
   rather than let the two-releases-old bookkeeping drift.
@@ -1345,16 +1764,21 @@ that column did, and every export since composes the column itself.
      checkpoint refuses to resume under a different one — that refusal is correct and
      must not be worked around.
   3. **The half-loaded namespace is now stranded.** With the checkpoint gone the next
-     run allocates a fresh generation number, leaving the partial one behind with no
-     `.asset` companion. Note its name and delete it in step 11; it is not one of the
-     two namespaces you keep.
+     run allocates a fresh generation number and leaves the partial one behind.
+     **Write its name down now** — nothing on the account distinguishes it later,
+     since every namespace built after 2026-08-26 looks alike. Delete it in step
+     11; it is not one of the two you keep.
   4. Re-run step 3 onwards, since the artefact the tree was published under has changed
      too. Step 3 will refuse — `published.$TODAY` exists from the first pass. Move
      **that** directory aside; it is this release's failed attempt. **Never move or
      delete the previous release's `published.<date>`**, which is the only copy of the
      source-page rollback.
 - **The export stops on the completeness gate.** Entities exist with no vector.
-  Embed them before releasing; do not pass `--skip-completeness-gate`.
+  **Precondition 8 is the whole answer** — the backfill command, why it does not
+  breach precondition 3, and the one comparison that decides whether steps 1 to 5
+  still stand. Do not pass `--skip-completeness-gate`. Nothing was written when
+  this gate fired, so there is no partial namespace to clean up and no checkpoint
+  to delete.
 - **Every live search answers `upstream` after deploying.** `upstream` covers
   turbopuffer and Fireworks failures past the retry table, and a broken router
   config (`ROWS`/`EXACT_FRACTION`/`DEADLINES_MS` unparseable — the Worker fails
