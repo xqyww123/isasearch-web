@@ -37,10 +37,10 @@ hint = "wnam"
 # pages match, and that ROWS is within 1 % of the namespace's
 # approx_row_count).  ROWS is the record count — §6.3c's denominator;
 # ENTITIES is the D5-collapsed display number, never the denominator.
-TPUF_NAMESPACE = "isasearch-2025-2-afp-2026-05-13"
-ROWS = "1337009"
-ENTITIES = "1230467"
-BUILT = "2026-08-20"
+TPUF_NAMESPACE = "isasearch-2025-2-afp-2026-05-13-2"
+ROWS = "1341843"
+ENTITIES = "1235163"
+BUILT = "2026-08-27"
 TPUF_REGION = "aws-us-west-2"
 FIREWORKS_MODEL = "fireworks/qwen3-embedding-8b"
 
