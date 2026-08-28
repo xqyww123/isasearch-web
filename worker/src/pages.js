@@ -23,9 +23,9 @@ export function page(fragment, site, { title, head = '', ...slots }) {
 }
 
 export const searchPage = (site) => page(indexPage, site, {
-  title: 'Isasearch', head: '<script type="module" src="/app.js"></script>' });
+  title: 'IsaFinder', head: '<script type="module" src="/app.js"></script>' });
 
-export const aboutPageOf = (site) => page(aboutPage, site, { title: 'About Isasearch' });
+export const aboutPageOf = (site) => page(aboutPage, site, { title: 'About IsaFinder' });
 
 export function entityPageOf(card, nearest, site) {
   // Each theory links to its published source page (ruled 2026-08-25).
@@ -49,7 +49,7 @@ export function entityPageOf(card, nearest, site) {
         + `</span></a>`).join('')
     : `<span class="section-note">${esc(COPY.nearestNone)}</span>`;
   return page(entityPage, site, {
-    title: `${displayName(card)} — Isasearch`,
+    title: `${displayName(card)} — IsaFinder`,
     name: esc(displayName(card)),
     kind: kindBadge(card.kinds[0], true),
     expr: esc(card.expr),
@@ -63,4 +63,4 @@ export function entityPageOf(card, nearest, site) {
 
 export const missingPage = (site) => page(
   `<div class="message">${esc(COPY.entityMissing)} <a href="/">${esc(COPY.entityMissingLink)}</a></div>`,
-  site, { title: 'Isasearch' });
+  site, { title: 'IsaFinder' });

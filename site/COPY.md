@@ -1,4 +1,4 @@
-# Interface copy — Isasearch
+# Interface copy — IsaFinder
 
 Draft 5, 2026-08-25. Every visitor-facing string, in one place, so that the
 implementation copies rather than invents.
@@ -83,10 +83,10 @@ serves the pre-regex strings. Everything else is what the built site serves.
 The whole page is the search box, with the Syntactic Filters panel group
 collapsed beneath it.
 
-> **Isasearch**
+> **IsaFinder**
 >
 > Search Isabelle/HOL and the Archive of Formal Proofs semantically by describing
-> what you want in natural languages (English, Chinese, or others). Isasearch
+> what you want in natural languages (English, Chinese, or others). IsaFinder
 > covers theorems, constants, types, classes, locales, proof methods and named
 > theorems. It's based on Isabelle «2025-2» and AFP «2026-05-13», containing
 > «1 230 467» entities now.
@@ -96,7 +96,7 @@ below was opened to other languages: "in English" was a restriction the system
 does not have. A Chinese query was measured against the live index and returned
 the same entities as the equivalent English one, so the promise is real — the
 embedding model is multilingual and the document side is unchanged.
-"semantically" states in the first sentence what the site is. The subject is **Isasearch**, never "the index" or "the
+"semantically" states in the first sentence what the site is. The subject is **IsaFinder**, never "the index" or "the
 system": a visitor sees one thing, and §1's rule gives it one name. The
 sentence about the rules Isabelle derives from `datatype`, `inductive` and
 `function` definitions was dropped — those rules are theorems, the Kind buttons
@@ -421,7 +421,7 @@ Hover:
 > Your condition matched this theory. It is one of the «23» theories that declare
 > the constants in this statement. The theory where the theorem was proved is
 > usually in that set too, because a statement normally uses constants from its own
-> theory — but Isasearch does not mark which one it is, so a match here does not
+> theory — but IsaFinder does not mark which one it is, so a match here does not
 > tell you where the theorem was proved. The entity page lists all «23».
 
 An `excludes` condition never produces this line: nothing was matched.
@@ -487,7 +487,7 @@ Absent form, in place of the link, never a dead link and never blank:
 
 Hover on the absent form:
 
-> Some commands do not report a position, so Isasearch cannot provide a link.
+> Some commands do not report a position, so IsaFinder cannot provide a link.
 
 ### 4.5 Under the list
 
@@ -508,7 +508,7 @@ not jump sideways when a button appears:
 At the end of the results, **when the condition's exact match count exceeds the
 rows returned**:
 
-> Isasearch returned the «194» most relevant entities for this search. Others
+> IsaFinder returned the «194» most relevant entities for this search. Others
 > also satisfy your conditions but were not returned. If what you are looking for
 > is not among them, add a condition to narrow the search.
 
@@ -700,7 +700,7 @@ assume the worst:
 
 The whole site is above its limit (10 000 per hour):
 
-> Isasearch is busy. Try again in a moment.
+> IsaFinder is busy. Try again in a moment.
 
 The query is too long:
 
@@ -840,7 +840,7 @@ An entity page that does not exist:
 The header, left to right: the site name (a link home), the metadata line, the
 search box (shown only on the result page), and the two links.
 
-> Isasearch   «1 230 467» entities · Isabelle «2025-2» · AFP «2026-05-13»
+> IsaFinder   «1 230 467» entities · Isabelle «2025-2» · AFP «2026-05-13»
 
 *(Shortened by the user 2026-08-25 from "Isabelle release 2025-2 · AFP snapshot
 2026-05-13". The line never wraps: it shrinks, then clips, and below 900 px it
@@ -850,7 +850,7 @@ caught on a narrow window.)*
 
 The footer:
 
-> Isasearch · built for Isabelle release 2025-2 · AFP snapshot 2026-05-13 · index built
+> IsaFinder · built for Isabelle release 2025-2 · AFP snapshot 2026-05-13 · index built
 > «2026-08-20»
 
 *(The footer wraps rather than crushing: the build line will not shrink, and
@@ -989,7 +989,7 @@ plan.
 
 ## 14. The about page — approved 2026-08-25
 
-Heading: **About Isasearch**, then a table, then five sections. §1–§4 reuse
+Heading: **About IsaFinder**, then a table, then five sections. §1–§4 reuse
 wording locked elsewhere in this file (named beside each); the sentences marked
 *new* were approved by the user on 2026-08-25.
 
@@ -1017,7 +1017,7 @@ value that appears in both is read twice rather than hunted for once.
 
 **What is indexed**
 
-> Isasearch covers the Isabelle release 2025-2 and the Archive of Formal Proofs
+> IsaFinder covers the Isabelle release 2025-2 and the Archive of Formal Proofs
 > snapshot of 2026-05-13, and nothing outside them. It covers theorems, constants,
 > types, classes, locales, proof methods and named theorems. In total it holds
 > «1 230 467» entities. It was built on «2026-08-20».
@@ -1037,12 +1037,12 @@ this paragraph with §2's; the paragraph below names those four kinds anyway.)
 
 **How a search works**
 
-> Isasearch uses an [embedding model](https://en.wikipedia.org/wiki/Sentence_embedding)
+> IsaFinder uses an [embedding model](https://en.wikipedia.org/wiki/Sentence_embedding)
 > («fireworks/qwen3-embedding-8b» in the current configuration) to turn your
 > natural-language query, and the pre-generated natural-language explanations of
 > all Isabelle entities (see "About the explanations" below), into vectors in a
 > high-dimensional space. In this vector space, the distance between two vectors
-> reflects how close they are in meaning. Isasearch then uses a
+> reflects how close they are in meaning. IsaFinder then uses a
 > [k-NN search](https://en.wikipedia.org/wiki/Nearest_neighbor_search) to find
 > the entities whose vectors lie closest to the vector of your query, and
 > returns those entities as the results. This is the standard approach in
@@ -1095,7 +1095,7 @@ it is simply not written on the page.)
 
 **Authors**
 
-> Isasearch is made by [Qiyuan Xu](https://qiyuan.me), with
+> IsaFinder is made by [Qiyuan Xu](https://qiyuan.me), with
 > [Claude Code](https://claude.com/claude-code). The source is on
 > [GitHub](https://github.com/xqyww123/isasearch-web).
 

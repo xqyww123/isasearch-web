@@ -314,7 +314,7 @@ function renderResults() {
     // (§6.3c).  The printed number stays the card count.
     $('list-end').textContent = complete
       ? `These are all ${thin(results.length)} entities that satisfy your conditions.`
-      : `Isasearch returned the ${thin(results.length)} most relevant entities for this search. Others also satisfy your conditions but were not returned. If what you are looking for is not among them, add a condition to narrow the search.`;
+      : `IsaFinder returned the ${thin(results.length)} most relevant entities for this search. Others also satisfy your conditions but were not returned. If what you are looking for is not among them, add a condition to narrow the search.`;
   }
 }
 

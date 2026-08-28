@@ -63,7 +63,7 @@ export const COPY = {
     + 'such as `datatype` or `fun` rather than from an explicit declaration, so the line '
     + 'number refers to that command.',
   sourceAbsent: 'source position not recorded',
-  sourceAbsentHover: 'Some commands do not report a position, so Isasearch cannot provide a link.',
+  sourceAbsentHover: 'Some commands do not report a position, so IsaFinder cannot provide a link.',
   // §8
   constituentTheories: 'Theories of the constants used',
   constituentTheoriesNote:

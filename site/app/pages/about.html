@@ -1,6 +1,6 @@
 <!-- COPY.md §14, approved 2026-08-25.  Slots: entities, built. -->
 <div class="about">
-  <h1>About Isasearch</h1>
+  <h1>About IsaFinder</h1>
 
   <!-- Every machine-derived value the site knows about itself, in one place.
        All five are slots: the first four come from the asset sentinel and the
@@ -17,13 +17,13 @@
 
   <div class="section">
     <span class="section-label">What is indexed</span>
-    <p>Isasearch covers the Isabelle release {{release}} and the Archive of Formal Proofs snapshot of {{snapshot}}, and nothing outside them. It covers theorems, constants, types, classes, locales, proof methods and named theorems. In total it holds {{entities}} entities. It was built on {{built}}.</p>
+    <p>IsaFinder covers the Isabelle release {{release}} and the Archive of Formal Proofs snapshot of {{snapshot}}, and nothing outside them. It covers theorems, constants, types, classes, locales, proof methods and named theorems. In total it holds {{entities}} entities. It was built on {{built}}.</p>
     <p>An entity has one of 11 kinds: Theorem, Named theorems, Constant, Type, Class, Locale, Proof method, Introduction rule, Elimination rule, Induction rule and Case split. <strong>Named theorems</strong> is a <code>named_theorems</code> declaration, such as <code>approximation_preproc</code>. <strong>Case split</strong> is a case rule: one case for each constructor of a datatype, or for each introduction rule of an inductive definition. A rule whose name ends in <code>.split</code>, such as <code>option.split</code>, has the kind Theorem here.</p>
   </div>
 
   <div class="section">
     <span class="section-label">How a search works</span>
-    <p>Isasearch uses an <a href="https://en.wikipedia.org/wiki/Sentence_embedding">embedding model</a> (<code>{{model}}</code> in the current configuration) to turn your natural-language query, and the pre-generated natural-language explanations of all Isabelle entities (see &ldquo;About the explanations&rdquo; below), into vectors in a high-dimensional space. In this vector space, the distance between two vectors reflects how close they are in meaning. Isasearch then uses a <a href="https://en.wikipedia.org/wiki/Nearest_neighbor_search">k-NN search</a> to find the entities whose vectors lie closest to the vector of your query, and returns those entities as the results. This is the standard approach in machine learning, known as <a href="https://en.wikipedia.org/wiki/Semantic_search">semantic search</a>.</p>
+    <p>IsaFinder uses an <a href="https://en.wikipedia.org/wiki/Sentence_embedding">embedding model</a> (<code>{{model}}</code> in the current configuration) to turn your natural-language query, and the pre-generated natural-language explanations of all Isabelle entities (see &ldquo;About the explanations&rdquo; below), into vectors in a high-dimensional space. In this vector space, the distance between two vectors reflects how close they are in meaning. IsaFinder then uses a <a href="https://en.wikipedia.org/wiki/Nearest_neighbor_search">k-NN search</a> to find the entities whose vectors lie closest to the vector of your query, and returns those entities as the results. This is the standard approach in machine learning, known as <a href="https://en.wikipedia.org/wiki/Semantic_search">semantic search</a>.</p>
   </div>
 
   <div class="section">
@@ -38,6 +38,6 @@
 
   <div class="section">
     <span class="section-label">Authors</span>
-    <p>Isasearch is made by <a href="https://qiyuan.me">Qiyuan Xu</a>, with <a href="https://claude.com/claude-code">Claude Code</a>. The source is on <a href="https://github.com/xqyww123/isasearch-web">GitHub</a>.</p>
+    <p>IsaFinder is made by <a href="https://qiyuan.me">Qiyuan Xu</a>, with <a href="https://claude.com/claude-code">Claude Code</a>. The source is on <a href="https://github.com/xqyww123/isasearch-web">GitHub</a>.</p>
   </div>
 </div>
