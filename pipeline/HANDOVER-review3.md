@@ -1387,3 +1387,9 @@ tree; drop it next time.
 **The guard script was fixed before it ran.** As committed it required
 `LIVE + '.asset'` to exist, which no post-2026-08-26 namespace has, so it
 aborted on every release. Verified against the live account before and after.
+
+**Scheduled cleanup — delete on or after 2026-09-11** (ruled 2026-08-28):
+`~/isasearch-pipeline/regexprobe/`, 521 MB of pre-regex probe scratch including
+a 406 MB `groundtruth.npz`. Step 7b used to point at it; since the launch gate
+moved into `worker/probe/`, no document references it. A dated note sits in the
+directory itself. `rm -rf ~/isasearch-pipeline/regexprobe`
