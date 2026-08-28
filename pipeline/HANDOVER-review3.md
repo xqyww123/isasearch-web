@@ -1290,3 +1290,75 @@ engine's own message text).
 companion, the `worker/.dev.vars` `TPUF_NAMESPACE` line,
 `published.pre-basefix-20260824` (5.1 GB), and the regexprobe scratch under
 `~/isasearch-pipeline/regexprobe/` (incl. the 406 MB `groundtruth.npz`).
+
+---
+
+## RELEASE 2026-08-27 → 28 (live)
+
+| | |
+| --- | --- |
+| namespace | `isasearch-2025-2-afp-2026-05-13-2` |
+| artefact content hash | `54c3b8e26b68` |
+| deployed Worker version | `5b276d1b-f8e2-4129-83d2-6822d4b7190f` |
+| commit sha deployed | `d388c98` |
+| published tree | `published.20260827` (rollback: `published`) |
+| predecessor | `isasearch-2025-2-afp-2026-05-13` — KEEP until the next release |
+
+Step 6's REPORT, as pasted into `[vars]`:
+
+```
+TPUF_NAMESPACE = "isasearch-2025-2-afp-2026-05-13-2"
+ROWS           = "1341843"
+ENTITIES       = "1235163"
+BUILT          = "2026-08-27"
+```
+
+**Figures.** scan 35 s — 1,341,843 records, 9,818 linkable files, 486,655 pairs.
+map 7.8 s — 10,595 theory pages, residue 0, linked 99.05 %. publish **14 m 32 s**
+— 486,655 marks, 11 merged conflicts. gate (tree) **14 m 08 s** — 15,970,528
+references, counters 232/1/106 unchanged. R2 **8 m 48 s** — but only 12 of 11,750
+files changed, so that is a metadata pass, not an upload. export 1,341,843
+documents = the scan's final-line count; counts `undecodable` 0, `wip` 255,
+`experience` 6768, `out of scope` 277, **`no defining theory` 3256**. gate
+(namespace, sample 1000) **15 m 39 s**, zero misses.
+
+**Step 5's rclone invocation, as actually run** (first time these commands met a
+populated bucket): the six `RCLONE_*` exports, then `rclone lsf` to prove the
+prefix, `rclone copy … --dry-run` redirected to a file, `rclone copy …
+--transfers 32 --checkers 32`, `rclone check … --one-way` → 0 differences over
+11,750 files. Spurious `501 NotImplemented` on attempt 1, absorbed by retries.
+
+**Step 7b** — full record in `~/isasearch-pipeline/launchgate-final-20260828.log`.
+Blocking checks all pass: score parity 0.0016 @10 and 0.0058 @100, kNN
+certificate, no uncaught under-fill, `Not(Regex)` returns all 3,256 empty-theory
+rows, fallback kNN 14,220 ms. Overlap recorded, not enforced: `200 198 132 180 183`.
+
+**Five things that cost time, so the next release does not rediscover them.**
+
+1. **The completeness gate fired mid-release** — 5,119 shippable records with no
+   vector, all with interpretations, from corpus growth since 2026-08-20. Fixed
+   by `isabelle_semantics.py embed --yes Qwen/Qwen3-Embedding-8B`: 5,373 embedded,
+   1,124,538 tokens, minutes, cents. The failed attempt created no namespace and
+   wrote no checkpoint. Precondition 8 now exists to catch this before step 1.
+2. **Export throughput collapsed** from 209 docs/s to 8 docs/s over four hours,
+   with TLS `EOF in violation of protocol`, write timeouts, DNS failures and
+   turbopuffer `HTTP 408` — 35 retries, none past 3/5. Reads stayed fast and the
+   machine was idle, so it was upstream. A SIGINT + resume recovered it (17 docs/s
+   average after), costing one batch group. **The recovery is not visible in the
+   first three minutes** — measure twice, several minutes apart, before concluding
+   a restart achieved nothing.
+3. **The launch gate's set-identity criterion was wrong** and is now recorded, not
+   enforced. It failed 133/200 while the results were correct; the two negations
+   at 179/200 and 183/200 had similarity gaps of 0.0000 and 0.0027. Replaced by
+   score parity (top-10 within 0.005, top-100 within 0.01), user-ruled 2026-08-28.
+4. **`no defining theory` moved 533 → 3,256.** ~3,073 are `Geo_Real2.*` entities
+   positioned under `/home/qiyuan/Current/MLML/task…` — local task theories, not
+   Isabelle or AFP. They carry an empty `theory` and match no Theory Name
+   condition. D24's session test did not exclude them. **Open question: should
+   local-task entities be published at all?**
+5. **`regex: true` makes `filterable` default to false.** `Eq`/`In` on `name`,
+   `expr` or `theory` now 400 — only `Regex`/`Not(Regex)` reach them. `kind` is
+   unaffected and `In` still works there.
+
+**Fallback deadline has little headroom**: kNN legs measured 14,220–14,891 ms
+against a 15,000 ms deadline. Unresolved; the only unenforced risk in the router.
