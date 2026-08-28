@@ -1371,3 +1371,19 @@ one confirmed `sync` from breaking the site's typography. Fixed by serving it
 from the Worker's assets (`1fb0040`), where it deploys with the CSS that names
 it and no prune can reach it. After that the prune list is the dead R2 copy
 alone.
+
+**Step 11 completed 2026-08-28.** Deleted, approved item by item: the R2 object
+`source/fonts/PhiSymbols.ttf` (dead once `1fb0040` moved the font to the
+Worker's assets) and the namespaces `isasearch-preview-20260826` and
+`isasearch-preview-20260826.asset` (the abandoned 2026-08-26 preview). The
+account now holds exactly `isasearch-2025-2-afp-2026-05-13-2` (live),
+`isasearch-2025-2-afp-2026-05-13` (rollback) and that one's `.asset`.
+`rclone check --one-way` after the prune: 0 differences over 11,750 files.
+
+**Kept deliberately**: `published.pre-basefix-20260824` (5.1 GB, two releases
+old). Disk was at 176 G free and this release showed the value of an extra old
+tree; drop it next time.
+
+**The guard script was fixed before it ran.** As committed it required
+`LIVE + '.asset'` to exist, which no post-2026-08-26 namespace has, so it
+aborted on every release. Verified against the live account before and after.
