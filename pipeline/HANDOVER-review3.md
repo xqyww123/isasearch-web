@@ -1393,3 +1393,44 @@ aborted on every release. Verified against the live account before and after.
 a 406 MB `groundtruth.npz`. Step 7b used to point at it; since the launch gate
 moved into `worker/probe/`, no document references it. A dated note sits in the
 directory itself. `rm -rf ~/isasearch-pipeline/regexprobe`
+
+## Out-of-cycle deploy 2026-08-28 — the brand became IsaFinder
+
+The name Isasearch collided with someone else's work, so the user ruled it
+renamed. Commit `a53ad4e`, Worker version `5820120d-6323-4e47-8a26-d9bcd31e6853`.
+
+**Only the text a visitor reads changed** — 15 strings: the four browser-tab
+titles in `worker/src/pages.js`, the header brand link and footer line in
+`shell.html`, both `<h1>`s and the intro, three about-page paragraphs, the
+truncation notice in `app.js` and the missing-source tooltip in `render.js`.
+`site/COPY.md` moved with them, except four occurrences inside its historical
+annotations, which quote sentences deleted on 2026-08-25/26 and stay verbatim.
+
+**No identifier was renamed**, so this deploy carried the same `[vars]` as
+`fbb84e20`: the Worker is still `isasearch`, the bucket `isasearch`, the
+namespace `isasearch-2025-2-afp-2026-05-13-2`, and the two GitHub links still
+point at `xqyww123/isasearch-web`. `worker/src/index.js`'s
+`/^isasearch-(.+)-afp-(\d{4}-\d{2}-\d{2})/` had to keep the old spelling for the
+same reason — it parses the namespace name into the release and snapshot the
+header prints, and renaming it would blank that line. The rename was therefore
+a case-sensitive substitution of `Isasearch`: the brand is capitalised
+everywhere, every identifier is lower-case, and the two never collide.
+
+**No data moved.** The 11,750 published `/source/*` pages carry no brand —
+checked against the live `HOL.List.html`, zero occurrences — so neither the
+export nor the 5.04 GiB R2 tree needed touching, and steps 1–7 were skipped
+entirely. A rename that reached the identifiers would be a different job: a new
+Worker (the `DAILY_GATE` Durable Object is scoped to the script, so the daily
+counters and usage statistics would reset), a bucket copy, and a namespace
+clone — turbopuffer has no rename, but `branch_from_namespace` clones instantly
+within a region.
+
+**Verified live after deploy**: `/api/search` 200; `/`, `/about` and a real
+`/entity/<key>` all render IsaFinder in title, brand and footer; `app.js` and
+`render.js` serve it too. The header still prints "Isabelle 2025-2 · AFP
+2026-05-13", which is the untouched regex working.
+
+**The zone cache was not purged.** `/` and `/about` are not edge-cached, and
+entity pages carry a 4 h Worker-written cache, so stale pages showing the old
+name age out by themselves. The purge still pending from step 11 (the deleted
+font, `cf-cache-status: HIT`) is unaffected by this deploy.
