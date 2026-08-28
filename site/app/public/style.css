@@ -5,7 +5,7 @@
 
 @font-face {
   font-family: 'PhiSymbols';
-  src: url('/source/fonts/PhiSymbols.ttf') format('truetype');
+  src: url('/fonts/PhiSymbols.ttf') format('truetype');
   font-display: swap;
 }
 
