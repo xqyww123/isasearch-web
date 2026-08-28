@@ -1299,8 +1299,8 @@ companion, the `worker/.dev.vars` `TPUF_NAMESPACE` line,
 | --- | --- |
 | namespace | `isasearch-2025-2-afp-2026-05-13-2` |
 | artefact content hash | `54c3b8e26b68` |
-| deployed Worker version | `5b276d1b-f8e2-4129-83d2-6822d4b7190f` |
-| commit sha deployed | `d388c98` |
+| deployed Worker version | `fbb84e20-b4bc-40ff-932b-e95267e3c99a` (step 8 deployed `5b276d1b-…`; superseded same night by the PhiSymbols fix) |
+| commit sha deployed | `1fb0040` (step 8's own commit was `d388c98`) |
 | published tree | `published.20260827` (rollback: `published`) |
 | predecessor | `isasearch-2025-2-afp-2026-05-13` — KEEP until the next release |
 
@@ -1362,3 +1362,12 @@ rows, fallback kNN 14,220 ms. Overlap recorded, not enforced: `200 198 132 180 1
 
 **Fallback deadline has little headroom**: kNN legs measured 14,220–14,891 ms
 against a 15,000 ms deadline. Unresolved; the only unenforced risk in the router.
+
+**Step 11's prune caught a live asset.** The dry run offered to delete exactly
+one object, `source/fonts/PhiSymbols.ttf` — the font all Isabelle text on the
+site is set in. No published tree contains it and neither does the rendered
+tree, because it had been uploaded to R2 by hand; every release since has been
+one confirmed `sync` from breaking the site's typography. Fixed by serving it
+from the Worker's assets (`1fb0040`), where it deploys with the CSS that names
+it and no prune can reach it. After that the prune list is the dead R2 copy
+alone.
